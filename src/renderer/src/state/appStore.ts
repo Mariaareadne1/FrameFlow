@@ -1,12 +1,7 @@
 import { create } from 'zustand'
 import { loadPrefs, savePrefs, type Preferences } from '../lib/prefs'
 
-export type Route =
-  | { name: 'home' }
-  | { name: 'record'; intent: 'quick' | 'advanced' }
-  | { name: 'processing'; intent: 'quick' | 'advanced' }
-  | { name: 'quick' }
-  | { name: 'editor' }
+export type Route = { name: 'home' } | { name: 'record' } | { name: 'processing' } | { name: 'studio' }
 
 export interface Toast {
   id: number

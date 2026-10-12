@@ -9,8 +9,11 @@ function typing(e: KeyboardEvent): boolean {
   return !!el && (el.tagName === 'INPUT' || el.tagName === 'TEXTAREA' || el.isContentEditable)
 }
 
-/** Editor keyboard shortcuts. `advanced` enables timeline editing keys. */
-export function useEditorShortcuts(advanced: boolean): void {
+/**
+ * Studio keyboard shortcuts. Space, undo/redo, save, Z (add Moment), Delete and Escape work
+ * everywhere; `timeline` adds the precision keys (C to cut, arrows to step frames).
+ */
+export function useEditorShortcuts(timeline: boolean): void {
   useEffect(() => {
     const onKey = (e: KeyboardEvent) => {
       if (typing(e) || document.querySelector('[role="dialog"]')) return
@@ -26,13 +29,11 @@ export function useEditorShortcuts(advanced: boolean): void {
       } else if (mod && e.key.toLowerCase() === 's') {
         e.preventDefault()
         void saveNow()
-      } else if (!advanced) {
-        return
       } else if (e.key === 'z' && !mod && ed.project) {
         const { project, zoom } = addManualZoom(ed.project, usePlayhead.getState().time, !!ed.track)
         ed.apply(() => project)
         ed.select({ kind: 'zoom', id: zoom.id })
-      } else if (e.key === 'c' && !mod && ed.project) {
+      } else if (e.key === 'c' && !mod && ed.project && timeline) {
         const t = usePlayhead.getState().time
         ed.apply((p) => addTrim(p, t, Math.min(p.media.duration, t + Math.min(2, p.media.duration / 4))))
       } else if ((e.key === 'Backspace' || e.key === 'Delete') && ed.selection) {
@@ -41,12 +42,12 @@ export function useEditorShortcuts(advanced: boolean): void {
         ed.select(null)
       } else if (e.key === 'Escape') {
         ed.select(null)
-      } else if (e.key === 'ArrowLeft' || e.key === 'ArrowRight') {
+      } else if (timeline && (e.key === 'ArrowLeft' || e.key === 'ArrowRight')) {
         const step = e.shiftKey ? 1 : 1 / 30
         playback.seek(usePlayhead.getState().time + (e.key === 'ArrowLeft' ? -step : step))
       }
     }
     window.addEventListener('keydown', onKey)
     return () => window.removeEventListener('keydown', onKey)
-  }, [advanced])
+  }, [timeline])
 }

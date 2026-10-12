@@ -19,6 +19,8 @@ export interface PlaybackControls {
   pause(): void
   toggle(): void
   seek(sourceTime: number): void
+  /** Plays from `from` and pauses at `to` (source seconds). */
+  playRange(from: number, to: number): void
 }
 
 let controls: PlaybackControls | null = null
@@ -36,4 +38,5 @@ export const playback = {
   pause: () => controls?.pause(),
   toggle: () => controls?.toggle(),
   seek: (t: number) => controls?.seek(t),
+  playRange: (from: number, to: number) => controls?.playRange(from, to),
 }

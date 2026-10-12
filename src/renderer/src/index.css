@@ -1,30 +1,48 @@
 @import "tailwindcss";
+@import "@fontsource-variable/inter/index.css";
+@import "@fontsource/instrument-serif/400.css";
+@import "@fontsource/instrument-serif/400-italic.css";
 
+/*
+ * FrameFlow 2.0 — Editorial Studio design tokens.
+ * Warm paper surfaces, ink text, lavender for selection, coral for recording and cuts.
+ */
 @theme {
-  --color-bg: #0b0c0f;
-  --color-panel: #121318;
-  --color-panel-2: #17191f;
-  --color-panel-3: #1e2028;
-  --color-line: rgba(255, 255, 255, 0.07);
-  --color-line-strong: rgba(255, 255, 255, 0.12);
-  --color-fg: #ecedf1;
-  --color-muted: #8d909b;
-  --color-subtle: #5d606b;
-  --color-accent: #7c86ff;
-  --color-accent-strong: #6470ff;
-  --color-accent-soft: rgba(124, 134, 255, 0.14);
-  --color-rec: #ff4f5e;
-  --color-danger: #ff6b6b;
-  --color-success: #3ecf8e;
-  --color-zoom: #8b7bff;
-  --color-trim: #ff8a5c;
-  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+  --color-paper: #f7f5f0;
+  --color-surface: #ffffff;
+  --color-sunk: #efeee9;
+  --color-sunk-2: #e7e5df;
+  --color-ink: #25262b;
+  --color-ink-2: #6e6e75;
+  --color-ink-3: #a3a3a8;
+  --color-line: #dfded8;
+  --color-line-soft: #e9e8e3;
+  --color-lavender: #aa9acf;
+  --color-lavender-ink: #6c5a9c;
+  --color-lavender-soft: #ece7f6;
+  --color-coral: #e7a99a;
+  --color-coral-ink: #b4604c;
+  --color-coral-soft: #f8e6e1;
+  --color-sage: #7fa38a;
+  --color-sage-soft: #e3eee6;
+
+  --font-sans: "Inter Variable", -apple-system, BlinkMacSystemFont, "Segoe UI", system-ui, sans-serif;
+  --font-serif: "Instrument Serif", "Iowan Old Style", Georgia, serif;
   --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
-  --radius-xl: 14px;
+
+  --radius-control: 10px;
+  --radius-card: 16px;
+  --radius-sheet: 22px;
+
+  --shadow-soft: 0 1px 2px rgba(37, 38, 43, 0.04), 0 4px 16px -6px rgba(37, 38, 43, 0.08);
+  --shadow-lift: 0 2px 6px rgba(37, 38, 43, 0.05), 0 18px 40px -16px rgba(37, 38, 43, 0.22);
+  --shadow-canvas: 0 2px 6px rgba(60, 48, 30, 0.06), 0 30px 70px -30px rgba(60, 48, 30, 0.35);
+
+  --ease-out-soft: cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
 :root {
-  color-scheme: dark;
+  color-scheme: light;
 }
 
 html,
@@ -35,16 +53,16 @@ body,
 
 body {
   margin: 0;
-  background: var(--color-bg);
-  color: var(--color-fg);
+  background: var(--color-paper);
+  color: var(--color-ink);
   font-family: var(--font-sans);
   font-size: 13px;
+  font-feature-settings: "cv11", "ss01";
   -webkit-font-smoothing: antialiased;
   user-select: none;
   overflow: hidden;
 }
 
-/* The HUD window is transparent. */
 body.hud {
   background: transparent;
 }
@@ -55,7 +73,7 @@ textarea {
 }
 
 :focus-visible {
-  outline: 2px solid var(--color-accent);
+  outline: 2px solid var(--color-lavender);
   outline-offset: 2px;
 }
 
@@ -66,31 +84,40 @@ textarea {
   -webkit-app-region: no-drag;
 }
 
-/* Range input styled consistently and accessibly. */
+.font-display {
+  font-family: var(--font-serif);
+  font-weight: 400;
+  letter-spacing: -0.01em;
+}
+
+/* Range input: thin ink track with a lavender fill and a soft white knob. */
 input[type="range"].ff-range {
   -webkit-appearance: none;
   appearance: none;
   width: 100%;
-  height: 18px;
+  height: 20px;
   background: transparent;
 }
 input[type="range"].ff-range::-webkit-slider-runnable-track {
-  height: 4px;
+  height: 3px;
   border-radius: 999px;
-  background: linear-gradient(to right, var(--color-accent) var(--fill, 50%), rgba(255, 255, 255, 0.1) var(--fill, 50%));
+  background: linear-gradient(to right, var(--color-ink) var(--fill, 50%), var(--color-sunk-2) var(--fill, 50%));
 }
 input[type="range"].ff-range::-webkit-slider-thumb {
   -webkit-appearance: none;
-  height: 14px;
-  width: 14px;
-  margin-top: -5px;
+  height: 16px;
+  width: 16px;
+  margin-top: -6.5px;
   border-radius: 999px;
   background: #fff;
-  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
-  transition: transform 120ms ease;
+  box-shadow: 0 0 0 1px rgba(37, 38, 43, 0.12), 0 2px 6px rgba(37, 38, 43, 0.18);
+  transition: transform 140ms var(--ease-out-soft);
 }
 input[type="range"].ff-range:active::-webkit-slider-thumb {
-  transform: scale(1.15);
+  transform: scale(1.12);
+}
+input[type="range"].ff-range:disabled {
+  opacity: 0.4;
 }
 
 ::-webkit-scrollbar {
@@ -98,24 +125,50 @@ input[type="range"].ff-range:active::-webkit-slider-thumb {
   height: 10px;
 }
 ::-webkit-scrollbar-thumb {
-  background: rgba(255, 255, 255, 0.08);
+  background: rgba(37, 38, 43, 0.12);
   border-radius: 999px;
   border: 3px solid transparent;
   background-clip: padding-box;
 }
 
-@keyframes ff-fade-in {
+@keyframes ff-rise {
   from {
     opacity: 0;
-    transform: translateY(4px);
+    transform: translateY(6px);
   }
   to {
     opacity: 1;
     transform: none;
   }
 }
-.ff-fade-in {
-  animation: ff-fade-in 220ms ease-out both;
+.ff-rise {
+  animation: ff-rise 240ms var(--ease-out-soft) both;
+}
+
+@keyframes ff-fade {
+  from {
+    opacity: 0;
+  }
+  to {
+    opacity: 1;
+  }
+}
+.ff-fade {
+  animation: ff-fade 200ms ease-out both;
+}
+
+@keyframes ff-slide-in {
+  from {
+    opacity: 0;
+    transform: translateX(16px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.ff-slide-in {
+  animation: ff-slide-in 240ms var(--ease-out-soft) both;
 }
 
 @keyframes ff-pulse {
@@ -129,4 +182,38 @@ input[type="range"].ff-range:active::-webkit-slider-thumb {
 }
 .ff-pulse {
   animation: ff-pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes ff-shimmer {
+  from {
+    background-position: -200px 0;
+  }
+  to {
+    background-position: 200px 0;
+  }
+}
+.ff-shimmer {
+  background: linear-gradient(90deg, var(--color-sunk) 0%, var(--color-line-soft) 50%, var(--color-sunk) 100%);
+  background-size: 400px 100%;
+  animation: ff-shimmer 1.2s linear infinite;
+}
+
+.ff-lift {
+  transition:
+    transform 200ms var(--ease-out-soft),
+    box-shadow 200ms var(--ease-out-soft);
+}
+.ff-lift:hover {
+  transform: translateY(-2px);
+  box-shadow: var(--shadow-lift);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 1ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 1ms !important;
+  }
 }

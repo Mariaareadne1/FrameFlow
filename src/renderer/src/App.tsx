@@ -3,14 +3,14 @@ import { X } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useApp } from './state/appStore'
 import { useEditor } from './state/editorStore'
+import { useStudio } from './state/studioStore'
 import { useAutosave } from './lib/autosave'
 import { projectFromRecording } from './lib/projectFlow'
 import { errorMessage } from './lib/format'
 import { Home } from './screens/Home'
 import { RecordSetup } from './screens/RecordSetup'
 import { Processing } from './screens/Processing'
-import { QuickDemo } from './screens/QuickDemo'
-import { Editor } from './screens/Editor'
+import { Studio } from './screens/Studio'
 import { SettingsDialog } from './components/SettingsDialog'
 import { ExportDialog } from './components/ExportDialog'
 
@@ -19,12 +19,11 @@ function useCaptureLifecycle(): void {
     return window.frameflow.capture.onEvent((event) => {
       const app = useApp.getState()
       if (event.type === 'stopped') {
-        const intent = app.route.name === 'record' || app.route.name === 'processing' ? app.route.intent : 'quick'
-        app.navigate({ name: 'processing', intent })
+        app.navigate({ name: 'processing' })
         projectFromRecording(event.result, app.prefs)
           .then(() => {
-            useEditor.getState().setMode(intent === 'quick' ? 'quick' : 'advanced')
-            useApp.getState().navigate(intent === 'quick' ? { name: 'quick' } : { name: 'editor' })
+            useStudio.getState().reset('moments')
+            useApp.getState().navigate({ name: 'studio' })
           })
           .catch((err) => {
             useApp.getState().toast('error', `The recording was saved but could not be opened: ${errorMessage(err)}`)
@@ -41,18 +40,18 @@ function Toasts() {
   const toasts = useApp((s) => s.toasts)
   const dismiss = useApp((s) => s.dismissToast)
   return (
-    <div className="pointer-events-none fixed bottom-5 left-1/2 z-50 flex w-[440px] -translate-x-1/2 flex-col gap-2" aria-live="polite">
+    <div className="pointer-events-none fixed bottom-6 left-1/2 z-50 flex w-[460px] -translate-x-1/2 flex-col gap-2" aria-live="polite">
       {toasts.map((t) => (
         <div
           key={t.id}
           role={t.kind === 'error' ? 'alert' : 'status'}
           className={clsx(
-            'ff-fade-in pointer-events-auto flex items-start gap-3 rounded-xl px-4 py-3 text-[13px] shadow-2xl ring-1 backdrop-blur-xl',
-            t.kind === 'error' ? 'bg-[#2a1416]/95 text-[#ffd5d5] ring-danger/30' : 'bg-panel-3/95 text-fg ring-line-strong',
+            'ff-rise pointer-events-auto flex items-start gap-3 rounded-[14px] px-4 py-3 text-[13px] shadow-[var(--shadow-lift)]',
+            t.kind === 'error' ? 'bg-coral-soft text-[#7a3a2c]' : 'bg-ink text-paper',
           )}
         >
           <span className="flex-1 leading-snug">{t.message}</span>
-          <button aria-label="Dismiss" onClick={() => dismiss(t.id)} className="text-muted hover:text-fg">
+          <button aria-label="Dismiss" onClick={() => dismiss(t.id)} className="opacity-60 hover:opacity-100">
             <X size={14} />
           </button>
         </div>
@@ -73,21 +72,20 @@ export function App() {
       screen = <Home />
       break
     case 'record':
-      screen = <RecordSetup intent={route.intent} />
+      screen = <RecordSetup />
       break
     case 'processing':
       screen = <Processing />
       break
-    case 'quick':
-      screen = hasProject ? <QuickDemo /> : <Home />
-      break
-    case 'editor':
-      screen = hasProject ? <Editor /> : <Home />
+    case 'studio':
+      screen = hasProject ? <Studio /> : <Home />
       break
   }
   return (
     <div className="flex h-full flex-col">
-      {screen}
+      <div key={route.name} className="ff-fade flex min-h-0 flex-1 flex-col">
+        {screen}
+      </div>
       <SettingsDialog />
       <ExportDialog />
       <Toasts />

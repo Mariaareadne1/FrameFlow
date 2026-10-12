@@ -31,7 +31,8 @@ export async function projectFromRecording(result: RecordingResult, prefs: Prefe
     },
     cursorTrack: track,
     style: prefs.style,
-    autoZoom: track ? prefs.autoZoom : 'off',
+    camera: prefs.camera,
+    cursorEffect: prefs.cursor,
     aspectRatio,
   })
   const path = await api.project.createPath(name, result.folder)
@@ -46,16 +47,12 @@ export async function projectFromImport(prefs: Preferences): Promise<boolean> {
   if (!file) return false
   const probe = await probeMedia(file)
   const base = file.split('/').pop()?.replace(/\.[^.]+$/, '') || 'Imported Video'
-  const project: Project = {
-    ...createProject({
-      name: base,
-      media: { path: file, width: probe.width, height: probe.height, duration: probe.duration, hasAudio: probe.hasAudio, cursorPath: null, cursorEmbedded: true },
-      cursorTrack: null,
-      style: prefs.style,
-      autoZoom: 'off',
-    }),
-    mode: 'advanced',
-  }
+  const project: Project = createProject({
+    name: base,
+    media: { path: file, width: probe.width, height: probe.height, duration: probe.duration, hasAudio: probe.hasAudio, cursorPath: null, cursorEmbedded: true },
+    cursorTrack: null,
+    style: prefs.style,
+  })
   const path = await api.project.createPath(base)
   await api.project.save(path, project, null)
   useEditor.getState().load({ project, path, cursor: null, mediaMissing: false })

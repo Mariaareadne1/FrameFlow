@@ -1,9 +1,9 @@
 import { useCallback, useLayoutEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent, type ReactNode } from 'react'
-import { Pause, Play, Plus, Scissors, ZoomIn, ZoomOut } from 'lucide-react'
+import { Plus, Scissors, ZoomIn, ZoomOut } from 'lucide-react'
 import { clsx } from 'clsx'
 import type { Project, TrimRange, ZoomEvent } from '@shared/project'
 import { addManualZoom, addTrim, updateTrim, updateZoom } from '@shared/projectModel'
-import { keptSegments, outputDuration, sourceToOutput } from '@shared/engine/timeline'
+import { keptSegments } from '@shared/engine/timeline'
 import { useEditor } from '../state/editorStore'
 import { playback, usePlayhead } from '../state/playhead'
 import { formatTime } from '../lib/format'
@@ -35,7 +35,6 @@ export function Timeline() {
   const select = useEditor((s) => s.select)
   const apply = useEditor((s) => s.apply)
   const time = usePlayhead((s) => s.time)
-  const playing = usePlayhead((s) => s.playing)
   const scrollRef = useRef<HTMLDivElement>(null)
   const [viewport, setViewport] = useState(800)
   const [scale, setScale] = useState(1)
@@ -54,7 +53,6 @@ export function Timeline() {
   const contentWidth = duration * pxPerSecond
   const x = useCallback((t: number) => t * pxPerSecond, [pxPerSecond])
   const segments = useMemo(() => keptSegments(project.trims, duration), [project.trims, duration])
-  const outDur = outputDuration(segments)
 
   const timeFromEvent = (e: { clientX: number }, el: HTMLElement) => {
     const rect = el.getBoundingClientRect()
@@ -140,17 +138,13 @@ export function Timeline() {
   for (let t = 0; t <= duration + 1e-6; t += step) ticks.push(t)
 
   return (
-    <div className="flex h-full flex-col border-t border-line bg-panel" data-testid="timeline">
-      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line px-3">
-        <IconButton label={playing ? 'Pause (Space)' : 'Play (Space)'} onClick={() => playback.toggle()} data-testid="timeline-play">
-          {playing ? <Pause size={16} fill="currentColor" /> : <Play size={16} fill="currentColor" />}
-        </IconButton>
-        <div className="font-mono text-[12px] tabular-nums text-muted" data-testid="timecode">
-          <span className="text-fg">{formatTime(sourceToOutput(segments, time), true)}</span> / {formatTime(outDur, true)}
-        </div>
+    <div className="ff-rise mx-6 mb-4 flex h-full flex-col overflow-hidden rounded-[var(--radius-card)] bg-surface shadow-[var(--shadow-soft)]" data-testid="timeline">
+      <div className="flex h-11 shrink-0 items-center gap-2 border-b border-line-soft px-3">
+        <span className="font-display px-1 text-[19px] leading-none">Timeline</span>
+        <span className="text-[11.5px] text-ink-3">Source time · {segments.length > 1 ? `${segments.length - 1} cut${segments.length > 2 ? 's' : ''}` : 'no cuts'}</span>
         <div className="mx-2 h-5 w-px bg-line" />
-        <Button size="sm" variant="ghost" onClick={addZoomAtPlayhead} data-testid="add-zoom" title="Add zoom at playhead (Z)">
-          <Plus size={13} /> Zoom <Kbd>Z</Kbd>
+        <Button size="sm" variant="ghost" onClick={addZoomAtPlayhead} data-testid="add-zoom" title="Add a Moment at the playhead (Z)">
+          <Plus size={13} /> Moment <Kbd>Z</Kbd>
         </Button>
         <Button size="sm" variant="ghost" onClick={cutAtPlayhead} data-testid="add-cut" title="Cut a section at the playhead (C)">
           <Scissors size={13} /> Cut <Kbd>C</Kbd>
@@ -169,11 +163,11 @@ export function Timeline() {
         <div className="relative" style={{ width: contentWidth + LABEL_WIDTH + 24, minHeight: '100%' }}>
           {/* Ruler */}
           <div className="sticky left-0 flex h-6">
-            <div style={{ width: LABEL_WIDTH }} className="shrink-0 bg-panel" />
+            <div style={{ width: LABEL_WIDTH }} className="shrink-0 bg-surface" />
             <div className="relative cursor-text" style={{ width: contentWidth }} onPointerDown={onScrubDown} data-testid="timeline-ruler">
               {ticks.map((t) => (
                 <div key={t} className="absolute top-0 h-full border-l border-line" style={{ left: x(t) }}>
-                  <span className="ml-1 font-mono text-[10px] text-subtle">{formatTime(t, step < 1)}</span>
+                  <span className="ml-1 font-mono text-[10px] text-ink-3">{formatTime(t, step < 1)}</span>
                 </div>
               ))}
             </div>
@@ -182,9 +176,9 @@ export function Timeline() {
           {/* Video track */}
           <Row label="Video">
             <div className="relative h-full cursor-text" style={{ width: contentWidth }} onPointerDown={onScrubDown}>
-              <div className="absolute inset-y-1 left-0 right-0 overflow-hidden rounded-md bg-gradient-to-b from-[#2b2f3d] to-[#232633] ring-1 ring-white/10">
+              <div className="absolute inset-y-1.5 left-0 right-0 overflow-hidden rounded-[8px] bg-sunk">
                 {track?.clicks.map((c, i) => (
-                  <span key={i} title="Click" className="absolute bottom-1 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-white/50" style={{ left: x(c.t) }} />
+                  <span key={i} title="Click" className="absolute bottom-1.5 h-1.5 w-1.5 -translate-x-1/2 rounded-full bg-ink-3" style={{ left: x(c.t) }} />
                 ))}
               </div>
               {project.trims.map((t) => (
@@ -194,7 +188,7 @@ export function Timeline() {
                   left={x(t.start)}
                   width={x(t.end) - x(t.start)}
                   selected={selection?.kind === 'trim' && selection.id === t.id}
-                  className="bg-[repeating-linear-gradient(135deg,rgba(255,138,92,0.35)_0_6px,rgba(255,138,92,0.15)_6px_12px)] ring-trim"
+                  className="bg-[repeating-linear-gradient(135deg,rgba(231,169,154,0.55)_0_6px,rgba(231,169,154,0.25)_6px_12px)] ring-coral"
                   label="Cut"
                   onPointerDown={(e, mode) => beginDrag(e, 'trim', t, mode)}
                 />
@@ -203,7 +197,7 @@ export function Timeline() {
           </Row>
 
           {/* Zoom track */}
-          <Row label="Zoom">
+          <Row label="Moments">
             <div
               className="relative h-full"
               style={{ width: contentWidth }}
@@ -216,7 +210,7 @@ export function Timeline() {
               }}
             >
               {project.zooms.length === 0 && (
-                <div className="pointer-events-none absolute inset-y-1 left-2 flex items-center text-[11px] text-subtle">Double-click to add a zoom</div>
+                <div className="pointer-events-none absolute inset-y-1 left-2 flex items-center text-[11.5px] text-ink-3">Double-click to add a Moment</div>
               )}
               {project.zooms.map((z) => (
                 <Block
@@ -225,8 +219,8 @@ export function Timeline() {
                   left={x(z.start)}
                   width={x(z.end) - x(z.start)}
                   selected={selection?.kind === 'zoom' && selection.id === z.id}
-                  className={clsx(z.origin === 'auto' ? 'bg-zoom/25 ring-zoom/60 [background-image:linear-gradient(90deg,rgba(139,123,255,0.15),rgba(139,123,255,0.35))]' : 'bg-zoom/45 ring-zoom')}
-                  label={`${z.origin === 'auto' ? 'Auto ' : ''}${z.scale.toFixed(1)}×`}
+                  className={clsx(z.disabled ? 'bg-sunk-2 text-ink-2 ring-line' : z.origin === 'auto' ? 'bg-lavender-soft ring-lavender/70' : 'bg-lavender/55 ring-lavender-ink/60')}
+                  label={`${z.label ? `${z.label} · ` : z.origin === 'auto' ? 'Auto ' : ''}${z.disabled ? 'off' : `${z.scale.toFixed(1)}×`}`}
                   onPointerDown={(e, mode) => beginDrag(e, 'zoom', z, mode)}
                 />
               ))}
@@ -234,8 +228,8 @@ export function Timeline() {
           </Row>
 
           {/* Playhead */}
-          <div className="pointer-events-none absolute bottom-0 top-0 z-20 w-px bg-white" style={{ left: LABEL_WIDTH + x(time) }} data-testid="playhead">
-            <div className="absolute -left-[5px] top-0 h-0 w-0 border-x-[5px] border-t-[7px] border-x-transparent border-t-white" />
+          <div className="pointer-events-none absolute bottom-0 top-0 z-20 w-[1.5px] bg-coral-ink" style={{ left: LABEL_WIDTH + x(time) }} data-testid="playhead">
+            <div className="absolute -left-[5px] top-0 h-0 w-0 border-x-[5.5px] border-t-[7px] border-x-transparent border-t-coral-ink" />
           </div>
         </div>
       </div>
@@ -245,8 +239,8 @@ export function Timeline() {
 
 function Row({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex h-12 items-stretch border-b border-line/60">
-      <div className="sticky left-0 z-10 flex shrink-0 items-center bg-panel pl-3 text-[11px] font-medium text-subtle" style={{ width: LABEL_WIDTH }}>
+    <div className="flex h-12 items-stretch">
+      <div className="sticky left-0 z-10 flex shrink-0 items-center bg-surface pl-3 text-[11px] font-semibold uppercase tracking-[0.06em] text-ink-2" style={{ width: LABEL_WIDTH }}>
         {label}
       </div>
       {children}
@@ -274,13 +268,13 @@ function Block({
   return (
     <div
       data-testid={testId}
-      className={clsx('absolute inset-y-1 z-10 cursor-grab rounded-md ring-1 active:cursor-grabbing', className, selected && 'ring-2 ring-white')}
+      className={clsx('absolute inset-y-1.5 z-10 cursor-grab rounded-[8px] ring-1 active:cursor-grabbing', className, selected && 'ring-2 ring-ink')}
       style={{ left, width: Math.max(4, width) }}
       onPointerDown={(e) => onPointerDown(e, 'move')}
     >
-      <span className="pointer-events-none absolute inset-0 flex items-center overflow-hidden whitespace-nowrap px-2 text-[11px] font-medium text-white/90">{width > 34 ? label : ''}</span>
-      <div className="absolute inset-y-0 left-0 w-2 cursor-ew-resize rounded-l-md hover:bg-white/30" onPointerDown={(e) => onPointerDown(e, 'start')} data-testid={`${testId}-start`} />
-      <div className="absolute inset-y-0 right-0 w-2 cursor-ew-resize rounded-r-md hover:bg-white/30" onPointerDown={(e) => onPointerDown(e, 'end')} data-testid={`${testId}-end`} />
+      <span className="pointer-events-none absolute inset-0 flex items-center overflow-hidden whitespace-nowrap px-2 text-[11px] font-medium text-ink">{width > 34 ? label : ''}</span>
+      <div className="absolute inset-y-0 left-0 w-2 cursor-ew-resize rounded-l-[8px] hover:bg-ink/15" onPointerDown={(e) => onPointerDown(e, 'start')} data-testid={`${testId}-start`} />
+      <div className="absolute inset-y-0 right-0 w-2 cursor-ew-resize rounded-r-[8px] hover:bg-ink/15" onPointerDown={(e) => onPointerDown(e, 'end')} data-testid={`${testId}-end`} />
     </div>
   )
 }

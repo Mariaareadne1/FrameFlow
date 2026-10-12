@@ -1,5 +1,4 @@
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from 'react'
-import { Play } from 'lucide-react'
 import type { CursorTrack, Project } from '@shared/project'
 import { outputSize } from '@shared/engine/layout'
 import { keptSegments, playableTime } from '@shared/engine/timeline'
@@ -23,7 +22,6 @@ export function Preview({ project, track, className }: Props) {
   const [box, setBox] = useState({ width: 0, height: 0 })
   const [error, setError] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
-  const playing = usePlayhead((s) => s.playing)
 
   // Scene depends only on what affects pixels, so unrelated edits don't rebuild paths.
   const scene = useMemo<RenderScene>(
@@ -119,6 +117,7 @@ export function Preview({ project, track, className }: Props) {
   // ---- Controls ----
   useEffect(() => {
     let raf = 0
+    let stopAt: number | null = null
     const tick = () => {
       const video = videoRef.current
       if (!video) return
@@ -133,6 +132,13 @@ export function Preview({ project, track, className }: Props) {
         usePlayhead.getState().set({ time: t })
         return
       }
+      if (stopAt !== null && t >= stopAt) {
+        video.pause()
+        stopAt = null
+        usePlayhead.getState().set({ playing: false, time: t })
+        draw(t)
+        return
+      }
       if (typeof jump === 'number') {
         // Skip drawing this tick: the old frame would be shown at the new time. 'seeked' redraws.
         video.currentTime = jump
@@ -144,7 +150,7 @@ export function Preview({ project, track, className }: Props) {
       usePlayhead.getState().set({ time: t })
       raf = requestAnimationFrame(tick)
     }
-    const controls = {
+    const controls: import('../state/playhead').PlaybackControls = {
       play: () => {
         const video = videoRef.current
         if (!video) return
@@ -164,13 +170,22 @@ export function Preview({ project, track, className }: Props) {
           () => usePlayhead.getState().set({ playing: false }),
         )
       },
+      playRange: (from: number, to: number) => {
+        const video = videoRef.current
+        if (!video) return
+        video.currentTime = Math.max(0, from)
+        stopAt = to
+        controls.play()
+      },
       pause: () => {
+        stopAt = null
         videoRef.current?.pause()
         cancelAnimationFrame(raf)
         usePlayhead.getState().set({ playing: false })
       },
       toggle: () => (usePlayhead.getState().playing ? controls.pause() : controls.play()),
       seek: (t: number) => {
+        stopAt = null
         const video = videoRef.current
         if (!video) return
         const clamped = Math.max(0, Math.min(t, project.media.duration))
@@ -207,7 +222,7 @@ export function Preview({ project, track, className }: Props) {
 
   return (
     <div ref={containerRef} className={`relative flex min-h-0 min-w-0 items-center justify-center ${className ?? ''}`}>
-      <div className="relative overflow-hidden rounded-lg shadow-[0_20px_60px_-20px_rgba(0,0,0,0.8)] ring-1 ring-white/5" style={{ width: box.width, height: box.height }}>
+      <div className="relative overflow-hidden rounded-[14px] shadow-[var(--shadow-canvas)] ring-1 ring-[rgba(37,38,43,0.06)] transition-[width,height] duration-200" style={{ width: box.width, height: box.height }}>
         <canvas
           ref={canvasRef}
           data-testid="preview-canvas"
@@ -216,17 +231,8 @@ export function Preview({ project, track, className }: Props) {
           className="block h-full w-full cursor-pointer"
           onClick={() => playback.toggle()}
         />
-        {!playing && ready && !error && (
-          <button
-            aria-label="Play"
-            onClick={() => playback.play()}
-            className="absolute bottom-4 left-4 flex h-10 w-10 items-center justify-center rounded-full bg-black/55 text-white backdrop-blur transition hover:bg-black/70"
-          >
-            <Play size={18} fill="currentColor" />
-          </button>
-        )}
-        {!ready && !error && <div className="absolute inset-0 flex items-center justify-center text-sm text-muted">Loading video…</div>}
-        {error && <div className="absolute inset-0 flex items-center justify-center bg-black/70 p-6 text-center text-sm text-danger">{error}</div>}
+        {!ready && !error && <div className="ff-shimmer absolute inset-0 flex items-center justify-center text-[13px] text-ink-2">Loading video…</div>}
+        {error && <div className="absolute inset-0 flex items-center justify-center bg-surface/95 p-6 text-center text-[13px] text-coral-ink">{error}</div>}
       </div>
     </div>
   )

@@ -1,24 +1,38 @@
-import type { AutoZoomLevel, StylePresetId } from '@shared/project'
+import type { CameraFeel, CursorEffect, StyleId } from '@shared/project'
 
 /** Per-machine conveniences. Losing them is harmless, so browser storage is fine. */
 export interface Preferences {
-  style: StylePresetId
-  autoZoom: Exclude<AutoZoomLevel, 'off'> | 'off'
+  style: StyleId
+  camera: CameraFeel
+  cursor: CursorEffect
   countdown: number
   microphone: boolean
 }
 
-const KEY = 'frameflow.prefs.v1'
-export const DEFAULT_PREFS: Preferences = { style: 'clean', autoZoom: 'subtle', countdown: 3, microphone: false }
+const KEY = 'frameflow.prefs.v2'
+const LEGACY_KEY = 'frameflow.prefs.v1'
+const STYLES: readonly StyleId[] = ['studio', 'editorial', 'aura', 'canvas', 'midnight']
+const FEELS: readonly CameraFeel[] = ['still', 'calm', 'follow', 'focus']
+const CURSORS: readonly CursorEffect[] = ['natural', 'halo', 'spotlight', 'pulse']
+export const DEFAULT_PREFS: Preferences = { style: 'editorial', camera: 'calm', cursor: 'halo', countdown: 3, microphone: false }
+
+function pick<T>(v: unknown, options: readonly T[], fallback: T): T {
+  return options.includes(v as T) ? (v as T) : fallback
+}
 
 export function loadPrefs(): Preferences {
   try {
-    const raw = JSON.parse(localStorage.getItem(KEY) ?? '{}') as Partial<Preferences>
+    const raw = JSON.parse(localStorage.getItem(KEY) ?? 'null') as Partial<Preferences> | null
+    // Carry over the countdown and microphone choices from 0.1.
+    const legacy = raw ? null : (JSON.parse(localStorage.getItem(LEGACY_KEY) ?? '{}') as { countdown?: number; microphone?: boolean })
+    const src = raw ?? {}
+    const countdown = typeof src.countdown === 'number' ? src.countdown : legacy?.countdown
     return {
-      style: raw.style === 'minimal' || raw.style === 'colorful' ? raw.style : 'clean',
-      autoZoom: raw.autoZoom === 'off' || raw.autoZoom === 'dynamic' ? raw.autoZoom : 'subtle',
-      countdown: typeof raw.countdown === 'number' ? Math.max(0, Math.min(10, raw.countdown)) : 3,
-      microphone: raw.microphone === true,
+      style: pick(src.style, STYLES, DEFAULT_PREFS.style),
+      camera: pick(src.camera, FEELS, DEFAULT_PREFS.camera),
+      cursor: pick(src.cursor, CURSORS, DEFAULT_PREFS.cursor),
+      countdown: typeof countdown === 'number' ? Math.max(0, Math.min(10, countdown)) : DEFAULT_PREFS.countdown,
+      microphone: (src.microphone ?? legacy?.microphone) === true,
     }
   } catch {
     return DEFAULT_PREFS

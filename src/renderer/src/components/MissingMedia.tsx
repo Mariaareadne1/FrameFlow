@@ -36,13 +36,17 @@ export function MissingMedia() {
 
   return (
     <div className="flex flex-1 items-center justify-center p-8" data-testid="missing-media">
-      <div className="max-w-md rounded-2xl bg-panel p-8 text-center ring-1 ring-line">
-        <FileWarning className="mx-auto text-trim" size={30} />
-        <h2 className="mt-4 text-lg font-semibold">Can't find the video</h2>
-        <p className="mt-2 break-all text-[13px] leading-relaxed text-muted">This project uses <span className="font-mono text-[12px] text-fg">{project.media.path}</span>, which was moved or deleted. Your edits are safe.</p>
-        <div className="mt-6 flex justify-center gap-2">
-          <Button variant="primary" disabled={busy} onClick={locate}>Locate Video…</Button>
-          <Button onClick={() => navigate({ name: 'home' })}>Back Home</Button>
+      <div className="ff-rise max-w-[520px] rounded-[var(--radius-sheet)] bg-surface p-10 shadow-[var(--shadow-soft)]">
+        <span className="flex h-11 w-11 items-center justify-center rounded-full bg-coral-soft text-coral-ink">
+          <FileWarning size={20} />
+        </span>
+        <h2 className="font-display mt-5 text-[34px] leading-tight">Where did the video go?</h2>
+        <p className="mt-3 break-all text-[13px] leading-relaxed text-ink-2">
+          This project uses <span className="font-mono text-[12px] text-ink">{project.media.path}</span>. It was moved, deleted, or needs your confirmation. Your edits are safe.
+        </p>
+        <div className="mt-7 flex gap-2">
+          <Button variant="primary" disabled={busy} onClick={locate}>Locate video…</Button>
+          <Button onClick={() => navigate({ name: 'home' })}>Back to projects</Button>
         </div>
       </div>
     </div>

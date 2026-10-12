@@ -33,28 +33,28 @@ export function Hud() {
 
   return (
     <div className="drag-region flex h-full w-full items-center justify-center p-2">
-      <div className="flex h-12 w-full items-center gap-3 rounded-2xl bg-[#16171c]/95 px-3 text-white shadow-2xl ring-1 ring-white/10 backdrop-blur-xl">
+      <div className="flex h-12 w-full items-center gap-3 rounded-full bg-[#fbfaf7]/95 pl-4 pr-1.5 text-ink shadow-[0_8px_30px_-8px_rgba(37,38,43,0.35)] ring-1 ring-[#dfded8] backdrop-blur-xl">
         {state.kind === 'countdown' ? (
-          <span className="flex-1 text-center text-[13px] font-medium">Recording in {state.n}…</span>
+          <span className="font-display flex-1 text-center text-[19px]">Recording in {state.n}…</span>
         ) : state.kind === 'stopping' ? (
-          <span className="flex-1 text-center text-[13px] text-white/70">Saving…</span>
+          <span className="flex-1 text-center text-[13px] text-ink-2">Saving…</span>
         ) : (
           <>
-            <span className="ff-pulse ml-1 h-2.5 w-2.5 rounded-full bg-rec" />
-            <span className="flex-1 font-mono text-[13px] tabular-nums">{formatTime(state.kind === 'recording' ? state.s : 0)}</span>
+            <span className="ff-pulse h-2.5 w-2.5 rounded-full bg-coral" />
+            <span className="font-display flex-1 text-[21px] tabular-nums leading-none">{formatTime(state.kind === 'recording' ? state.s : 0)}</span>
           </>
         )}
-        <button
-          className="no-drag flex h-8 items-center gap-1.5 rounded-lg bg-white/10 px-3 text-[12px] font-medium hover:bg-white/20"
-          onClick={() => void window.frameflow.capture.stop()}
-        >
-          <Square size={11} fill="currentColor" /> {state.kind === 'countdown' ? 'Cancel' : 'Stop'}
-        </button>
         {state.kind === 'recording' && (
-          <button aria-label="Discard recording" title="Discard recording" className="no-drag flex h-8 w-8 items-center justify-center rounded-lg text-white/60 hover:bg-white/10 hover:text-white" onClick={() => void window.frameflow.capture.cancel()}>
+          <button aria-label="Discard recording" title="Discard recording" className="no-drag flex h-9 w-9 items-center justify-center rounded-full text-ink-2 hover:bg-sunk hover:text-ink" onClick={() => void window.frameflow.capture.cancel()}>
             <X size={15} />
           </button>
         )}
+        <button
+          className="no-drag flex h-9 items-center gap-1.5 rounded-full bg-ink px-4 text-[12.5px] font-medium text-paper hover:bg-[#34353b]"
+          onClick={() => void window.frameflow.capture.stop()}
+        >
+          <Square size={10} fill="currentColor" /> {state.kind === 'countdown' ? 'Cancel' : 'Stop'}
+        </button>
       </div>
     </div>
   )
