@@ -110,6 +110,39 @@ export function cursorSmoothTime(smoothing: number): number {
 /** Camera follow is much lazier than the visible cursor so zooms glide rather than chase. */
 export const CAMERA_SMOOTH_TIME = 0.45
 
+/** Maps the user-facing 0..1 follow smoothing to seconds. 0.5 → 0.45 s (the 0.1 value). */
+export function cameraSmoothTime(followSmoothing: number): number {
+  return 0.15 + clamp(followSmoothing, 0, 1) * 0.6
+}
+
+/**
+ * The path the camera follows. Like `buildSmoothPath`, but with a dead zone: the target only
+ * moves once the cursor strays more than `deadzone` from it, and then is dragged along on a
+ * leash. Small hand movements therefore never move the camera. deadzone 0 ≡ buildSmoothPath.
+ */
+export function buildCameraPath(samples: readonly CursorSample[], duration: number, smoothTime: number, deadzone: number): SmoothPath {
+  if (deadzone <= 0 || samples.length === 0) return buildSmoothPath(samples, duration, smoothTime)
+  const dt = 1 / PATH_RATE
+  const count = Math.max(2, Math.ceil(duration * PATH_RATE) + 1)
+  const leashed: CursorSample[] = new Array(count)
+  const first = sampleRaw(samples, 0)!
+  let tx = first.x
+  let ty = first.y
+  for (let i = 0; i < count; i++) {
+    const p = sampleRaw(samples, i * dt)!
+    const dx = p.x - tx
+    const dy = p.y - ty
+    const dist = Math.hypot(dx, dy)
+    if (dist > deadzone) {
+      const k = (dist - deadzone) / dist
+      tx += dx * k
+      ty += dy * k
+    }
+    leashed[i] = { t: i * dt, x: tx, y: ty }
+  }
+  return buildSmoothPath(leashed, duration, smoothTime)
+}
+
 /** Validates and sanitizes untrusted cursor JSON. Returns null if unusable. */
 export function parseCursorTrack(raw: unknown): CursorTrack | null {
   if (!raw || typeof raw !== 'object') return null

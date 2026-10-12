@@ -10,13 +10,26 @@
  * source video frame: (0,0) top-left, (1,1) bottom-right.
  */
 
-export const PROJECT_FORMAT_VERSION = 1
+/**
+ * v1: FrameFlow 0.1. v2: FrameFlow 2.0 — adds `camera` (replacing `autoZoom`), cursor
+ * treatments, Moment labels/disable flags, new style ids and frame shadow tint.
+ * Older files are migrated in `parseProject`; they are never regenerated or reset.
+ */
+export const PROJECT_FORMAT_VERSION = 2
 export const PROJECT_FILE_EXTENSION = 'frameflow'
 
 export type AspectRatio = '16:9' | '9:16' | '1:1' | '4:3'
-export type AutoZoomLevel = 'off' | 'subtle' | 'dynamic'
-export type StylePresetId = 'clean' | 'minimal' | 'colorful'
-export type EasingId = 'smooth' | 'snappy' | 'linear'
+/** 0.1 auto-zoom levels. Only read when migrating v1 files. */
+export type LegacyAutoZoomLevel = 'off' | 'subtle' | 'dynamic'
+/** How the automatic camera behaves. */
+export type CameraFeel = 'still' | 'calm' | 'follow' | 'focus'
+/** 2.0 art directions. Legacy 0.1 ids remain valid so old projects keep their identity. */
+export type StyleId = 'studio' | 'editorial' | 'aura' | 'canvas' | 'midnight'
+export type LegacyStyleId = 'clean' | 'minimal' | 'colorful'
+export type StylePresetId = StyleId | LegacyStyleId | 'custom'
+export type CursorEffect = 'natural' | 'halo' | 'spotlight' | 'pulse'
+/** 'snappy' is the 0.1 exponential ease-out (kept for old projects); 'crisp' is its 2.0 successor. */
+export type EasingId = 'smooth' | 'crisp' | 'snappy' | 'linear'
 export type EditorMode = 'quick' | 'advanced'
 
 export interface Point {
@@ -38,8 +51,12 @@ export interface ZoomEvent {
   easing: EasingId
   /** Seconds spent ramping in (and out). Clamped to half the event length at render time. */
   transition: number
-  /** 'auto' events are regenerated when the auto-zoom level changes; 'manual' ones never are. */
+  /** 'auto' events are regenerated when the camera feel changes; 'manual' ones never are. */
   origin: 'auto' | 'manual'
+  /** Optional user name for the Moment this event represents (presentation only). */
+  label?: string
+  /** A disabled Moment is kept in the project but produces no camera movement. */
+  disabled?: boolean
 }
 
 /** A removed section of the source, in source seconds. */
@@ -62,6 +79,8 @@ export interface FrameStyle {
   shadow: number
   /** Inset of the video inside its padded area, 0.5 – 1. 1 = fill the available area. */
   scale: number
+  /** Shadow colour (hex). Absent = black, the 0.1 behaviour. */
+  shadowTint?: string
 }
 
 export interface CursorStyle {
@@ -70,7 +89,25 @@ export interface CursorStyle {
   size: number
   /** 0 = raw movement, 1 = very smooth. */
   smoothing: number
+  /** Legacy 0.1 flag, kept in sync with `effect` ('pulse' ⇔ true) for older readers. */
   clickEffect: boolean
+  effect: CursorEffect
+  /** Strength of the cursor treatment, 0 – 1. */
+  effectIntensity: number
+}
+
+export interface CameraSettings {
+  feel: CameraFeel
+  /** Multiplies the magnification of automatic Moments (0.5 – 1.5). */
+  intensity: number
+  /** Multiplies transition speed of automatic Moments (0.5 – 1.5; higher = quicker). */
+  speed: number
+  /** 0 = crisp (snappy easing), 1 = soft (smooth easing). */
+  softness: number
+  /** How lazily the camera follows the cursor, 0 – 1 (maps to 0.15 – 0.75 s). */
+  followSmoothing: number
+  /** Cursor movement (normalized) ignored before the camera starts to follow. */
+  deadzone: number
 }
 
 export interface ExportSettings {
@@ -108,7 +145,7 @@ export interface Project {
   background: Background
   frame: FrameStyle
   cursor: CursorStyle
-  autoZoom: AutoZoomLevel
+  camera: CameraSettings
   zooms: ZoomEvent[]
   trims: TrimRange[]
   export: ExportSettings
@@ -141,4 +178,7 @@ export interface RecentProject {
   updatedAt: string
   duration: number
   thumbnail: string | null
+  aspectRatio?: AspectRatio
+  /** Computed when listing: the project's video can no longer be found. */
+  mediaMissing?: boolean
 }

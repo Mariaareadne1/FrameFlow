@@ -7,10 +7,41 @@ export const MAX_ZOOM_SCALE = 4
 export const MIN_ZOOM_DURATION = 0.3
 export const DEFAULT_TRANSITION = 0.8
 
+/** CSS-style cubic-bezier(x1, y1, x2, y2) easing (Newton iteration with bisection fallback). */
+export function cubicBezier(x1: number, y1: number, x2: number, y2: number): (x: number) => number {
+  const bx = (t: number) => 3 * x1 * t * (1 - t) ** 2 + 3 * x2 * t * t * (1 - t) + t ** 3
+  const by = (t: number) => 3 * y1 * t * (1 - t) ** 2 + 3 * y2 * t * t * (1 - t) + t ** 3
+  const dbx = (t: number) => 3 * x1 * (1 - t) ** 2 + 6 * (x2 - x1) * t * (1 - t) + 3 * (1 - x2) * t * t
+  return (x) => {
+    if (x <= 0) return 0
+    if (x >= 1) return 1
+    let t = x
+    for (let i = 0; i < 8; i++) {
+      const d = dbx(t)
+      if (Math.abs(d) < 1e-6) break
+      t -= (bx(t) - x) / d
+    }
+    if (t < 0 || t > 1 || Math.abs(bx(t) - x) > 1e-5) {
+      let lo = 0
+      let hi = 1
+      for (let i = 0; i < 30; i++) {
+        t = (lo + hi) / 2
+        if (bx(t) < x) lo = t
+        else hi = t
+      }
+    }
+    return by(t)
+  }
+}
+
+const crisp = cubicBezier(0.32, 0, 0.12, 1)
+
 export const EASINGS: Record<EasingId, (x: number) => number> = {
   // Symmetric ease-in-out: calm, cinematic.
   smooth: (x) => (x < 0.5 ? 4 * x * x * x : 1 - Math.pow(-2 * x + 2, 3) / 2),
-  // Fast start, long settle: feels responsive.
+  // Quick arrival with a gentle start (zero initial velocity): decisive but never a jump.
+  crisp,
+  // 0.1 "Snappy": instant start, long settle. Kept so older projects render unchanged.
   snappy: (x) => (x >= 1 ? 1 : 1 - Math.pow(2, -10 * x)) / (1 - Math.pow(2, -10)),
   linear: (x) => x,
 }
@@ -41,7 +72,7 @@ export function zoomWeight(z: ZoomEvent, t: number): number {
 export function effectiveZooms(zooms: readonly ZoomEvent[]): ZoomEvent[] {
   const manual = zooms.filter((z) => z.origin === 'manual')
   return zooms
-    .filter((z) => z.end - z.start >= MIN_ZOOM_DURATION - 1e-6)
+    .filter((z) => !z.disabled && z.end - z.start >= MIN_ZOOM_DURATION - 1e-6)
     .filter((z) => z.origin === 'manual' || !manual.some((m) => m.start < z.end && z.start < m.end))
     .slice()
     .sort((a, b) => a.start - b.start)
@@ -77,6 +108,8 @@ function focusPoint(z: ZoomEvent, cameraPath: SmoothPath | null, t: number): Poi
 
 /** Zooms closer than this (seconds) are chained: the camera pans between them instead of zooming out. */
 export const CHAIN_GAP = 0.8
+/** Shortest pan between chained zooms, so distant hand-offs never whip across the frame. */
+export const MIN_HANDOFF = 0.7
 
 /**
  * Groups sorted zooms into chains of back-to-back events.
@@ -117,7 +150,7 @@ function chainTarget(chain: readonly ZoomEvent[], cameraPath: SmoothPath | null,
     const b = chain[i + 1]!
     // Hand-off window: from when A would start leaving to when B would have fully arrived.
     const h0 = Math.max(lowerBound, Math.min(a.end - rampDuration(a), b.start))
-    const h1 = Math.max(h0 + 0.05, Math.max(a.end, b.start + rampDuration(b)))
+    const h1 = Math.max(h0 + MIN_HANDOFF, Math.max(a.end, b.start + rampDuration(b)))
     if (t < h0) return memberTarget(a, cameraPath, t)
     if (t <= h1) {
       const k = ease(b.easing, (t - h0) / (h1 - h0))

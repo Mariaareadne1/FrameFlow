@@ -94,6 +94,10 @@ export interface FrameFlowAPI {
     chooseAndOpen(): Promise<OpenedProject | null>
     recent(): Promise<RecentProject[]>
     forget(path: string): Promise<void>
+    /** Renames a project in Recents (updates the name stored in the project file). */
+    rename(path: string, name: string): Promise<void>
+    /** Shows a recent project file in Finder. */
+    reveal(path: string): Promise<void>
     readCursor(path: string): Promise<unknown>
   }
   export: {
@@ -127,6 +131,8 @@ export const IPC = {
   projectChooseOpen: 'project:choose-open',
   projectRecent: 'project:recent',
   projectForget: 'project:forget',
+  projectRename: 'project:rename',
+  projectReveal: 'project:reveal',
   projectReadCursor: 'project:read-cursor',
   exportChoose: 'export:choose',
   exportBegin: 'export:begin',

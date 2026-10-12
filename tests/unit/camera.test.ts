@@ -16,7 +16,7 @@ const zoom = (p: Partial<ZoomEvent>): ZoomEvent => ({
 })
 
 describe('easing', () => {
-  test.each(['smooth', 'snappy', 'linear'] as const)('%s starts at 0, ends at 1 and is monotonic', (id) => {
+  test.each(['smooth', 'crisp', 'snappy', 'linear'] as const)('%s starts at 0, ends at 1 and is monotonic', (id) => {
     expect(ease(id, 0)).toBeCloseTo(0, 6)
     expect(ease(id, 1)).toBeCloseTo(1, 6)
     let prev = -1
@@ -156,5 +156,14 @@ describe('minimum-length zooms', () => {
       const z = zoom({ start, end: start + 0.3 })
       expect(effectiveZooms([z])).toHaveLength(1)
     }
+  })
+})
+
+describe('crisp easing', () => {
+  test('starts at rest (no velocity jump) yet arrives faster than smooth', () => {
+    const h = 1e-3
+    expect(ease('crisp', h) / h).toBeLessThan(0.5)
+    expect(ease('snappy', h) / h).toBeGreaterThan(5)
+    expect(ease('crisp', 0.4)).toBeGreaterThan(ease('smooth', 0.4))
   })
 })

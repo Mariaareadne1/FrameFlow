@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { detectDwells, generateAutoZooms, regenerateAutoZooms } from '@shared/engine/autoZoom'
+import { AUTO_ZOOM_PARAMS, detectDwells, generateAutoZooms, regenerateAutoZooms } from '@shared/engine/autoZoom'
 import { cameraAt, effectiveZooms, viewportOf } from '@shared/engine/camera'
 import { CAMERA_SMOOTH_TIME, buildSmoothPath } from '@shared/engine/cursor'
 import type { ZoomEvent } from '@shared/project'
@@ -9,12 +9,12 @@ const track = scriptedTrack(DEMO_SCRIPT, 30)
 
 describe('auto zoom', () => {
   test('off produces nothing', () => {
-    expect(generateAutoZooms(track, 30, 'off')).toEqual([])
-    expect(generateAutoZooms(null, 30, 'subtle')).toEqual([])
+    expect(generateAutoZooms(track, 30, 'still')).toEqual([])
+    expect(generateAutoZooms(null, 30, 'calm')).toEqual([])
   })
 
-  test('subtle zooms cover each interaction cluster', () => {
-    const zooms = generateAutoZooms(track, 30, 'subtle')
+  test('calm zooms cover each interaction cluster', () => {
+    const zooms = generateAutoZooms(track, 30, 'calm')
     // Three clusters: top-left menu (3–4.2s), the form (9–12s), the far button (19s).
     expect(zooms.length).toBe(3)
     const clickTimes = track.clicks.map((c) => c.t)
@@ -27,7 +27,7 @@ describe('auto zoom', () => {
   })
 
   test('zoom focus lands on the interaction', () => {
-    const zooms = generateAutoZooms(track, 30, 'subtle')
+    const zooms = generateAutoZooms(track, 30, 'calm')
     const form = zooms.find((z) => z.start < 10.6 && z.end > 10.6)!
     expect(form.focus.mode).toBe('fixed')
     if (form.focus.mode === 'fixed') {
@@ -36,8 +36,8 @@ describe('auto zoom', () => {
     }
   })
 
-  test('dynamic is stronger and follows the cursor', () => {
-    const zooms = generateAutoZooms(track, 30, 'dynamic')
+  test('follow is stronger and follows the cursor', () => {
+    const zooms = generateAutoZooms(track, 30, 'follow')
     expect(zooms.length).toBeGreaterThanOrEqual(3)
     expect(Math.max(...zooms.map((z) => z.scale))).toBeGreaterThan(1.5)
     expect(zooms.every((z) => z.focus.mode === 'cursor')).toBe(true)
@@ -47,13 +47,13 @@ describe('auto zoom', () => {
     // A user clicking every 0.8s everywhere on screen for two minutes.
     const steps = Array.from({ length: 150 }, (_, i) => ({ t: 1 + i * 0.8, x: (i * 0.37) % 1, y: (i * 0.61) % 1, click: true }))
     const busy = scriptedTrack(steps, 125)
-    for (const level of ['subtle', 'dynamic'] as const) {
+    for (const level of ['calm', 'follow', 'focus'] as const) {
       const zooms = generateAutoZooms(busy, 125, level)
       for (let i = 0; i < zooms.length; i++) {
         const z = zooms[i]!
         expect(z.end - z.start).toBeGreaterThanOrEqual(1.5)
         const inMinute = zooms.filter((o) => o.start >= z.start && o.start < z.start + 60).length
-        expect(inMinute).toBeLessThanOrEqual(level === 'subtle' ? 5 : 9)
+        expect(inMinute).toBeLessThanOrEqual(AUTO_ZOOM_PARAMS[level].maxPerMinute)
         const next = zooms[i + 1]
         if (next) expect(next.start).toBeGreaterThanOrEqual(z.start)
       }
@@ -62,7 +62,7 @@ describe('auto zoom', () => {
 
   test('zooms stay within the clip, even for interactions at the very edges', () => {
     const edge = scriptedTrack([{ t: 0, x: 0.5, y: 0.5 }, { t: 0.2, x: 0.99, y: 0.01, click: true }, { t: 3.7, x: 0.01, y: 0.99, click: true }], 4)
-    for (const level of ['subtle', 'dynamic'] as const) {
+    for (const level of ['calm', 'follow', 'focus'] as const) {
       const zooms = generateAutoZooms(edge, 4, level)
       expect(zooms.length).toBeGreaterThan(0)
       for (const z of zooms) {
@@ -82,7 +82,7 @@ describe('auto zoom', () => {
 
   test('very short clip still yields a sensible zoom', () => {
     const short = scriptedTrack([{ t: 0, x: 0.3, y: 0.3, click: true }], 1.2)
-    const zooms = generateAutoZooms(short, 1.2, 'subtle')
+    const zooms = generateAutoZooms(short, 1.2, 'calm')
     for (const z of zooms) {
       expect(z.start).toBeGreaterThanOrEqual(0)
       expect(z.end).toBeLessThanOrEqual(1.2)
@@ -90,7 +90,7 @@ describe('auto zoom', () => {
   })
 
   test('is deterministic', () => {
-    expect(generateAutoZooms(track, 30, 'dynamic')).toEqual(generateAutoZooms(track, 30, 'dynamic'))
+    expect(generateAutoZooms(track, 30, 'follow')).toEqual(generateAutoZooms(track, 30, 'follow'))
   })
 
   test('dwells are detected after travel, not while jittering in place', () => {
@@ -101,14 +101,14 @@ describe('auto zoom', () => {
 
   test('recordings without clicks still get zooms from dwells', () => {
     const noClicks = { ...track, clicks: [] }
-    expect(generateAutoZooms(noClicks, 30, 'subtle').length).toBeGreaterThan(0)
+    expect(generateAutoZooms(noClicks, 30, 'calm').length).toBeGreaterThan(0)
   })
 
   test('regenerating keeps manual zooms and replaces automatic ones', () => {
     const manual: ZoomEvent = { id: 'm', start: 20, end: 22, scale: 3, focus: { mode: 'cursor' }, easing: 'snappy', transition: 0.5, origin: 'manual' }
-    const subtle = regenerateAutoZooms([manual], track, 30, 'subtle')
+    const subtle = regenerateAutoZooms([manual], track, 30, 'calm')
     expect(subtle.find((z) => z.id === 'm')).toEqual(manual)
-    const off = regenerateAutoZooms(subtle, track, 30, 'off')
+    const off = regenerateAutoZooms(subtle, track, 30, 'still')
     expect(off).toEqual([manual])
   })
 })
@@ -117,7 +117,7 @@ describe('auto zoom across distant interactions', () => {
   test('clicks in different places close in time stay strong separate zooms that chain into pans', () => {
     const steps = [{ t: 0, x: 0.5, y: 0.5 }, ...Array.from({ length: 5 }, (_, i) => ({ t: 1 + i * 2, x: i % 2 ? 0.15 : 0.85, y: i % 2 ? 0.2 : 0.8, click: true }))]
     const tr = scriptedTrack(steps, 12)
-    const zooms = generateAutoZooms(tr, 12, 'subtle')
+    const zooms = generateAutoZooms(tr, 12, 'calm')
     expect(zooms.length).toBeGreaterThanOrEqual(3)
     for (const z of zooms) expect(z.scale).toBeCloseTo(1.5)
     for (let i = 1; i < zooms.length; i++) expect(zooms[i]!.start).toBeGreaterThanOrEqual(zooms[i - 1]!.end - 1e-6)

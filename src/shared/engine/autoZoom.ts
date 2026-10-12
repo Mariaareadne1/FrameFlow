@@ -1,4 +1,4 @@
-import type { AutoZoomLevel, ClickEvent, CursorSample, CursorTrack, ZoomEvent } from '../project'
+import type { CameraFeel, CameraSettings, ClickEvent, CursorSample, CursorTrack, EasingId, ZoomEvent } from '../project'
 import { clamp } from './timeline'
 
 /**
@@ -36,8 +36,15 @@ export interface AutoZoomParams {
   focusMode: 'fixed' | 'cursor'
 }
 
-export const AUTO_ZOOM_PARAMS: Record<Exclude<AutoZoomLevel, 'off'>, AutoZoomParams> = {
-  subtle: {
+export type AutoFeel = Exclude<CameraFeel, 'still'>
+
+/**
+ * Per-feel parameters. Calm is exactly FrameFlow 0.1's "Subtle", so migrated projects and
+ * new Calm projects behave identically.
+ */
+export const AUTO_ZOOM_PARAMS: Record<AutoFeel, AutoZoomParams> = {
+  // Gentle: modest magnification, fixed framing, slow transitions, long holds, few zooms.
+  calm: {
     scale: 1.5,
     clusterGap: 2.2,
     leadIn: 0.7,
@@ -51,20 +58,49 @@ export const AUTO_ZOOM_PARAMS: Record<Exclude<AutoZoomLevel, 'off'>, AutoZoomPar
     dwellsWithClicks: false,
     focusMode: 'fixed',
   },
-  dynamic: {
-    scale: 2.0,
-    clusterGap: 1.5,
-    leadIn: 0.5,
-    hold: 1.25,
-    minDuration: 2.0,
-    maxDuration: 7,
-    transition: 0.7,
-    mergeGap: 1.0,
-    maxPerMinute: 9,
-    dwellMin: 0.7,
+  // Fluid: camera tracks the (dead-zoned, smoothed) cursor and pans between regions.
+  follow: {
+    scale: 1.8,
+    clusterGap: 1.8,
+    leadIn: 0.6,
+    hold: 1.5,
+    minDuration: 2.4,
+    maxDuration: 8,
+    transition: 0.8,
+    mergeGap: 1.4,
+    maxPerMinute: 7,
+    dwellMin: 0.8,
     dwellsWithClicks: true,
     focusMode: 'cursor',
   },
+  // Emphatic: stronger zooms centred on click clusters, crisp transitions.
+  focus: {
+    scale: 2.2,
+    clusterGap: 1.2,
+    leadIn: 0.4,
+    hold: 1.2,
+    minDuration: 2.0,
+    maxDuration: 6,
+    transition: 0.7,
+    mergeGap: 0.8,
+    maxPerMinute: 8,
+    dwellMin: 1.2,
+    dwellsWithClicks: false,
+    focusMode: 'fixed',
+  },
+}
+
+/** User tuning applied on top of a feel. Neutral values reproduce the feel exactly. */
+export type CameraTuning = Pick<CameraSettings, 'intensity' | 'speed' | 'softness'>
+
+export const NEUTRAL_TUNING: Record<AutoFeel, CameraTuning> = {
+  calm: { intensity: 1, speed: 1, softness: 0.8 },
+  follow: { intensity: 1, speed: 1, softness: 0.7 },
+  focus: { intensity: 1, speed: 1, softness: 0.3 },
+}
+
+export function easingForSoftness(softness: number): EasingId {
+  return softness >= 0.5 ? 'smooth' : 'crisp'
 }
 
 /** A point is "at rest" while it stays within this normalized radius. */
@@ -249,9 +285,15 @@ function capFrequency(drafts: readonly Draft[], maxPerMinute: number): Draft[] {
   return kept.sort((a, b) => a.start - b.start)
 }
 
-export function generateAutoZooms(track: CursorTrack | null, duration: number, level: AutoZoomLevel): ZoomEvent[] {
-  if (level === 'off' || !track || duration <= 0) return []
-  const params = AUTO_ZOOM_PARAMS[level]
+export function generateAutoZooms(track: CursorTrack | null, duration: number, feel: CameraFeel, tuning?: CameraTuning): ZoomEvent[] {
+  if (feel === 'still' || !track || duration <= 0) return []
+  const params = AUTO_ZOOM_PARAMS[feel]
+  const tune = tuning ?? NEUTRAL_TUNING[feel]
+  const intensity = clamp(tune.intensity, 0.5, 1.5)
+  const speed = clamp(tune.speed, 0.5, 1.5)
+  const maxScale = 1 + (params.scale - 1) * intensity
+  const transition = round3(params.transition / speed)
+  const easing = easingForSoftness(tune.softness)
   const points = collectInterestPoints(track, params).filter((p) => p.t >= 0 && p.t <= duration)
   const drafts = clusterPoints(points, params).map((c) => clusterToDraft(c, params, duration))
   const merged = mergeDrafts(drafts, params)
@@ -262,7 +304,7 @@ export function generateAutoZooms(track: CursorTrack | null, duration: number, l
     .map((d, i) => {
       // A merged cluster may be too wide for the target scale; back off so it still fits.
       const span = Math.max(d.spanX, d.spanY, 1e-6)
-      const scale = clamp(Math.min(params.scale, VIEWPORT_FILL / span), 1.25, params.scale)
+      const scale = clamp(Math.min(maxScale, VIEWPORT_FILL / span), Math.min(1.25, maxScale), maxScale)
       const focusFollows = params.focusMode === 'cursor' || span * scale > VIEWPORT_FILL
       return {
         id: `auto-${i}-${Math.round(d.start * 1000)}`,
@@ -270,8 +312,8 @@ export function generateAutoZooms(track: CursorTrack | null, duration: number, l
         end: round3(d.end),
         scale: round3(scale),
         focus: focusFollows ? { mode: 'cursor' as const } : { mode: 'fixed' as const, x: round3(d.cx), y: round3(d.cy) },
-        easing: 'smooth' as const,
-        transition: params.transition,
+        easing,
+        transition,
         origin: 'auto' as const,
       }
     })
@@ -282,10 +324,22 @@ export function regenerateAutoZooms(
   zooms: readonly ZoomEvent[],
   track: CursorTrack | null,
   duration: number,
-  level: AutoZoomLevel,
+  feel: CameraFeel,
+  tuning?: CameraTuning,
 ): ZoomEvent[] {
   const manual = zooms.filter((z) => z.origin === 'manual')
-  return [...manual, ...generateAutoZooms(track, duration, level)].sort((a, b) => a.start - b.start)
+  const taken = new Set(manual.map((z) => z.id))
+  const autos = generateAutoZooms(track, duration, feel, tuning)
+    // A manual Moment always wins where they overlap (as in rendering), so don't list both.
+    .filter((a) => !manual.some((m) => m.start < a.end && a.start < m.end))
+    // Edited Moments keep their original auto-… id; never mint a duplicate.
+    .map((a) => {
+      let id = a.id
+      for (let n = 2; taken.has(id); n++) id = `${a.id}-${n}`
+      taken.add(id)
+      return id === a.id ? a : { ...a, id }
+    })
+  return [...manual, ...autos].sort((a, b) => a.start - b.start)
 }
 
 function round3(v: number): number {

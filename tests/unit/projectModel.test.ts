@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { addManualZoom, addTrim, updateTrim, applyStyle, createProject, parseProject, ProjectValidationError, removeZoom, setAutoZoom, updateZoom } from '@shared/projectModel'
+import { addManualZoom, addTrim, updateTrim, applyStyle, createProject, parseProject, ProjectValidationError, removeZoom, setCameraFeel, updateZoom } from '@shared/projectModel'
 import type { MediaInfo } from '@shared/project'
 import { DEMO_SCRIPT, scriptedTrack } from '../support/synthetic'
 
@@ -9,7 +9,7 @@ const track = scriptedTrack(DEMO_SCRIPT, 30)
 describe('project model', () => {
   test('new recordings get professional defaults and automatic zooms', () => {
     const p = createProject({ name: 'Demo', media, cursorTrack: track })
-    expect(p.autoZoom).toBe('subtle')
+    expect(p.camera.feel).toBe('calm')
     expect(p.zooms.length).toBeGreaterThan(0)
     expect(p.zooms.every((z) => z.origin === 'auto')).toBe(true)
     expect(p.cursor.visible).toBe(true)
@@ -19,7 +19,7 @@ describe('project model', () => {
 
   test('imported video without cursor data: no auto zoom, no synthetic cursor', () => {
     const p = createProject({ name: 'Import', media: { ...media, cursorPath: null, cursorEmbedded: true }, cursorTrack: null })
-    expect(p.autoZoom).toBe('off')
+    expect(p.camera.feel).toBe('still')
     expect(p.zooms).toEqual([])
     expect(p.cursor.visible).toBe(false)
     const { project, zoom } = addManualZoom(p, 5, false)
@@ -29,7 +29,7 @@ describe('project model', () => {
 
   test('styles change look but keep edits', () => {
     const p = createProject({ name: 'Demo', media, cursorTrack: track })
-    const c = applyStyle(p, 'colorful')
+    const c = applyStyle(p, 'aura')
     expect(c.background).not.toEqual(p.background)
     expect(c.zooms).toEqual(p.zooms)
     expect(c.trims).toEqual(p.trims)
@@ -42,9 +42,9 @@ describe('project model', () => {
     const z = edited.zooms.find((x) => x.id === target.id)!
     expect(z.scale).toBe(2.5)
     expect(z.origin).toBe('manual')
-    const regenerated = setAutoZoom(edited, 'dynamic', track)
+    const regenerated = setCameraFeel(edited, 'focus', track)
     expect(regenerated.zooms.find((x) => x.id === target.id)?.scale).toBe(2.5)
-    expect(setAutoZoom(edited, 'off', track).zooms.map((x) => x.id)).toEqual([target.id])
+    expect(setCameraFeel(edited, 'still', track).zooms.map((x) => x.id)).toEqual([target.id])
   })
 
   test('zoom edits are clamped to the clip', () => {
@@ -60,7 +60,7 @@ describe('project model', () => {
   })
 
   test('save/load round trip preserves everything', () => {
-    let p = createProject({ name: 'Demo', media, cursorTrack: track, style: 'minimal', aspectRatio: '9:16' })
+    let p = createProject({ name: 'Demo', media, cursorTrack: track, style: 'midnight', aspectRatio: '9:16' })
     p = addTrim(p, 1, 2)
     p = updateZoom(p, p.zooms[0]!.id, { scale: 2.2, focus: { mode: 'fixed', x: 0.3, y: 0.4 } })
     const loaded = parseProject(JSON.parse(JSON.stringify(p)))

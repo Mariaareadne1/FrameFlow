@@ -1,13 +1,16 @@
 import {
   PROJECT_FORMAT_VERSION,
   type AspectRatio,
-  type AutoZoomLevel,
   type Background,
+  type CameraFeel,
+  type CameraSettings,
+  type CursorEffect,
   type CursorStyle,
   type CursorTrack,
   type EasingId,
   type ExportSettings,
   type FrameStyle,
+  type LegacyAutoZoomLevel,
   type MediaInfo,
   type Project,
   type StylePresetId,
@@ -15,8 +18,8 @@ import {
   type ZoomEvent,
   type ZoomFocus,
 } from './project'
-import { BACKGROUND_PRESETS, findStylePreset } from './styles'
-import { regenerateAutoZooms } from './engine/autoZoom'
+import { BACKGROUND_PRESETS, DEFAULT_STYLE, LEGACY_STYLE_PRESETS, STYLE_PRESETS, findStylePreset } from './styles'
+import { NEUTRAL_TUNING, regenerateAutoZooms } from './engine/autoZoom'
 import { DEFAULT_TRANSITION, MAX_ZOOM_SCALE, MIN_ZOOM_DURATION } from './engine/camera'
 import { clamp, normalizeTrims } from './engine/timeline'
 
@@ -35,16 +38,38 @@ export interface CreateProjectOptions {
   media: MediaInfo
   cursorTrack: CursorTrack | null
   style?: StylePresetId
-  autoZoom?: AutoZoomLevel
+  camera?: CameraFeel
+  cursorEffect?: CursorEffect
   aspectRatio?: AspectRatio
   now?: Date
 }
 
-/** Creates a project with professional defaults and automatic zooms already applied. */
+/** Default follow dead zone for new projects; migrated 0.1 projects use 0 (old behaviour). */
+export const DEFAULT_DEADZONE = 0.04
+
+export function defaultCamera(feel: CameraFeel): CameraSettings {
+  const tuning = feel === 'still' ? NEUTRAL_TUNING.calm : NEUTRAL_TUNING[feel]
+  return { feel, ...tuning, followSmoothing: 0.5, deadzone: DEFAULT_DEADZONE }
+}
+
+function tuningOf(camera: CameraSettings) {
+  return { intensity: camera.intensity, speed: camera.speed, softness: camera.softness }
+}
+
+/** Look of a style preset, or of a legacy 0.1 preset when one is requested (tests, migration). */
+function lookFor(id: StylePresetId): { background: Background; frame: FrameStyle } {
+  const style = findStylePreset(id) ?? LEGACY_STYLE_PRESETS.find((l) => l.id === id) ?? findStylePreset(DEFAULT_STYLE)!
+  return { background: style.background, frame: { ...style.frame } }
+}
+
+/** Creates a project with professional defaults and automatic Moments already applied. */
 export function createProject(opts: CreateProjectOptions): Project {
-  const style = findStylePreset(opts.style ?? 'clean')
+  const styleId = opts.style ?? DEFAULT_STYLE
+  const look = lookFor(styleId)
   const now = (opts.now ?? new Date()).toISOString()
-  const autoZoom = opts.autoZoom ?? (opts.cursorTrack ? 'subtle' : 'off')
+  const feel: CameraFeel = opts.cursorTrack ? (opts.camera ?? 'calm') : 'still'
+  const effect = opts.cursorEffect ?? 'halo'
+  const camera = defaultCamera(feel)
   const base: Project = {
     version: PROJECT_FORMAT_VERSION,
     id: newId('proj'),
@@ -53,33 +78,74 @@ export function createProject(opts: CreateProjectOptions): Project {
     updatedAt: now,
     mode: 'quick',
     media: opts.media,
-    style: style.id,
+    style: styleId,
     aspectRatio: opts.aspectRatio ?? '16:9',
-    background: style.background,
-    frame: { ...style.frame },
-    cursor: { visible: !opts.media.cursorEmbedded && !!opts.cursorTrack, ...style.cursor },
-    autoZoom,
+    background: look.background,
+    frame: look.frame,
+    cursor: {
+      visible: !opts.media.cursorEmbedded && !!opts.cursorTrack,
+      size: 1.4,
+      smoothing: 0.6,
+      clickEffect: effect === 'pulse',
+      effect,
+      effectIntensity: 0.8,
+    },
+    camera,
     zooms: [],
     trims: [],
     export: { ...DEFAULT_EXPORT },
   }
-  return { ...base, zooms: regenerateAutoZooms([], opts.cursorTrack, opts.media.duration, autoZoom) }
+  return { ...base, zooms: regenerateAutoZooms([], opts.cursorTrack, opts.media.duration, feel, tuningOf(camera)) }
 }
 
-/** Applies a style preset's look (background, frame, cursor feel) without touching edits. */
+/**
+ * Applies an art direction: backdrop and frame only. Camera, cursor, Moments and cuts are
+ * never touched by a style change.
+ */
 export function applyStyle(project: Project, id: StylePresetId): Project {
-  const style = findStylePreset(id)
+  const look = lookFor(id)
+  return { ...project, style: id, background: look.background, frame: look.frame }
+}
+
+/** Marks the look as customised (after manual background/frame edits). */
+export function customizeLook(project: Project, patch: Partial<Pick<Project, 'background' | 'frame'>>): Project {
+  return { ...project, ...patch, style: STYLE_PRESETS.some((s) => s.id === project.style) || project.style === 'custom' ? 'custom' : project.style }
+}
+
+/**
+ * Switches the camera feel. Automatic Moments are regenerated with the feel's neutral tuning;
+ * manual and edited Moments are always preserved.
+ */
+export function setCameraFeel(project: Project, feel: CameraFeel, track: CursorTrack | null): Project {
+  const neutral = feel === 'still' ? tuningOf(project.camera) : NEUTRAL_TUNING[feel]
+  const camera: CameraSettings = { ...project.camera, feel, ...neutral }
+  return { ...project, camera, zooms: regenerateAutoZooms(project.zooms, track, project.media.duration, feel, tuningOf(camera)) }
+}
+
+/** Adjusts camera tuning. Changing intensity/speed/softness regenerates automatic Moments. */
+export function tuneCamera(project: Project, patch: Partial<Omit<CameraSettings, 'feel'>>, track: CursorTrack | null): Project {
+  const camera: CameraSettings = {
+    ...project.camera,
+    ...patch,
+  }
+  const clean: CameraSettings = {
+    feel: camera.feel,
+    intensity: clamp(camera.intensity, 0.5, 1.5),
+    speed: clamp(camera.speed, 0.5, 1.5),
+    softness: clamp(camera.softness, 0, 1),
+    followSmoothing: clamp(camera.followSmoothing, 0, 1),
+    deadzone: clamp(camera.deadzone, 0, 0.15),
+  }
+  const regenerate = patch.intensity !== undefined || patch.speed !== undefined || patch.softness !== undefined
   return {
     ...project,
-    style: id,
-    background: style.background,
-    frame: { ...style.frame },
-    cursor: { ...project.cursor, ...style.cursor },
+    camera: clean,
+    zooms: regenerate ? regenerateAutoZooms(project.zooms, track, project.media.duration, clean.feel, tuningOf(clean)) : project.zooms,
   }
 }
 
-export function setAutoZoom(project: Project, level: AutoZoomLevel, track: CursorTrack | null): Project {
-  return { ...project, autoZoom: level, zooms: regenerateAutoZooms(project.zooms, track, project.media.duration, level) }
+export function setCursorEffect(project: Project, effect: CursorEffect): Project {
+  return { ...project, cursor: { ...project.cursor, effect, clickEffect: effect === 'pulse' } }
 }
 
 export function sanitizeZoom(z: ZoomEvent, duration: number): ZoomEvent {
@@ -163,9 +229,16 @@ export function removeTrim(project: Project, id: string): Project {
 export class ProjectValidationError extends Error {}
 
 const ASPECTS: readonly AspectRatio[] = ['16:9', '9:16', '1:1', '4:3']
-const LEVELS: readonly AutoZoomLevel[] = ['off', 'subtle', 'dynamic']
-const STYLES: readonly StylePresetId[] = ['clean', 'minimal', 'colorful']
-const EASING_IDS: readonly EasingId[] = ['smooth', 'snappy', 'linear']
+const LEGACY_LEVELS: readonly LegacyAutoZoomLevel[] = ['off', 'subtle', 'dynamic']
+const STYLES: readonly StylePresetId[] = ['studio', 'editorial', 'aura', 'canvas', 'midnight', 'clean', 'minimal', 'colorful', 'custom']
+const FEELS: readonly CameraFeel[] = ['still', 'calm', 'follow', 'focus']
+const EFFECTS: readonly CursorEffect[] = ['natural', 'halo', 'spotlight', 'pulse']
+const HEX = /^#[0-9a-fA-F]{3,8}$/
+const MAX_EVENTS = 2000
+
+/** 0.1 → 2.0 camera mapping. Stored zooms are kept verbatim, so output is unchanged. */
+export const LEGACY_FEEL: Record<LegacyAutoZoomLevel, CameraFeel> = { off: 'still', subtle: 'calm', dynamic: 'follow' }
+const EASING_IDS: readonly EasingId[] = ['smooth', 'crisp', 'snappy', 'linear']
 const RESOLUTIONS: readonly ExportSettings['resolution'][] = [720, 1080, 1440, 2160]
 
 type Obj = Record<string, unknown>
@@ -181,7 +254,7 @@ function parseBackground(v: unknown): Background {
   if (isObj(v) && v.kind === 'preset' && typeof v.presetId === 'string' && BACKGROUND_PRESETS.some((p) => p.id === v.presetId)) {
     return { kind: 'preset', presetId: v.presetId }
   }
-  return findStylePreset('clean').background
+  return findStylePreset(DEFAULT_STYLE)!.background
 }
 
 function parseZoom(v: unknown, duration: number): ZoomEvent | null {
@@ -201,9 +274,30 @@ function parseZoom(v: unknown, duration: number): ZoomEvent | null {
       easing: oneOf(v.easing, EASING_IDS, 'smooth'),
       transition: num(v.transition, DEFAULT_TRANSITION),
       origin: v.origin === 'auto' ? 'auto' : 'manual',
+      ...(typeof v.label === 'string' && v.label.trim() ? { label: v.label.trim().slice(0, 80) } : {}),
+      ...(v.disabled === true ? { disabled: true } : {}),
     },
     duration,
   )
+}
+
+function parseCamera(raw: Obj, version: number): CameraSettings {
+  if (version < 2 || !isObj(raw.camera)) {
+    // Migration from 0.1: keep the old camera exactly (no dead zone, 0.45 s follow smoothing).
+    const feel = LEGACY_FEEL[oneOf(raw.autoZoom, LEGACY_LEVELS, 'off')]
+    return { ...defaultCamera(feel), followSmoothing: 0.5, deadzone: 0 }
+  }
+  const c = raw.camera
+  const feel = oneOf(c.feel, FEELS, 'still')
+  const base = defaultCamera(feel)
+  return {
+    feel,
+    intensity: clamp(num(c.intensity, base.intensity), 0.5, 1.5),
+    speed: clamp(num(c.speed, base.speed), 0.5, 1.5),
+    softness: clamp(num(c.softness, base.softness), 0, 1),
+    followSmoothing: clamp(num(c.followSmoothing, 0.5), 0, 1),
+    deadzone: clamp(num(c.deadzone, 0), 0, 0.15),
+  }
 }
 
 /** Parses and normalizes a project file. Throws ProjectValidationError on unusable input. */
@@ -220,6 +314,7 @@ export function parseProject(raw: unknown): Project {
   }
   const duration = num(m.duration, 0)
   if (duration <= 0) throw new ProjectValidationError('Project media has an invalid duration.')
+  if (m.path.length > 4096) throw new ProjectValidationError('Project media path is too long.')
   const media: MediaInfo = {
     path: m.path,
     width: Math.max(1, Math.round(num(m.width, 1920))),
@@ -230,12 +325,13 @@ export function parseProject(raw: unknown): Project {
     cursorEmbedded: m.cursorEmbedded !== false,
   }
   const fr = isObj(raw.frame) ? raw.frame : {}
-  const defaults = findStylePreset('clean')
+  const defaults = findStylePreset(DEFAULT_STYLE)!
   const frame: FrameStyle = {
     padding: clamp(num(fr.padding, defaults.frame.padding), 0, 0.3),
     radius: clamp(num(fr.radius, defaults.frame.radius), 0, 80),
     shadow: clamp(num(fr.shadow, defaults.frame.shadow), 0, 1),
     scale: clamp(num(fr.scale, 1), 0.5, 1),
+    ...(typeof fr.shadowTint === 'string' && HEX.test(fr.shadowTint) ? { shadowTint: fr.shadowTint } : {}),
   }
   const cu = isObj(raw.cursor) ? raw.cursor : {}
   const cursor: CursorStyle = {
@@ -243,19 +339,23 @@ export function parseProject(raw: unknown): Project {
     size: clamp(num(cu.size, 1.4), 0.5, 3),
     smoothing: clamp(num(cu.smoothing, 0.6), 0, 1),
     clickEffect: cu.clickEffect !== false,
+    // v1 files have only clickEffect: ripple ⇒ Pulse, none ⇒ Natural (both pixel-identical).
+    effect: version >= 2 ? oneOf(cu.effect, EFFECTS, 'natural') : cu.clickEffect !== false ? 'pulse' : 'natural',
+    effectIntensity: clamp(num(cu.effectIntensity, 1), 0, 1),
   }
+  cursor.clickEffect = cursor.effect === 'pulse'
   const ex = isObj(raw.export) ? raw.export : {}
   const exportSettings: ExportSettings = {
     resolution: oneOf(ex.resolution, RESOLUTIONS, 1080),
     fps: ex.fps === 30 ? 30 : 60,
     quality: ex.quality === 'standard' ? 'standard' : 'high',
   }
-  const zooms = (Array.isArray(raw.zooms) ? raw.zooms : [])
+  const zooms = (Array.isArray(raw.zooms) ? raw.zooms.slice(0, MAX_EVENTS) : [])
     .map((z) => parseZoom(z, duration))
     .filter((z): z is ZoomEvent => z !== null)
     .sort((a, b) => a.start - b.start)
   const trims = normalizeTrims(
-    (Array.isArray(raw.trims) ? raw.trims : [])
+    (Array.isArray(raw.trims) ? raw.trims.slice(0, MAX_EVENTS) : [])
       .filter(isObj)
       .map((t) => ({ id: str(t.id, newId('trim')), start: num(t.start, 0), end: num(t.end, 0) })),
     duration,
@@ -269,12 +369,12 @@ export function parseProject(raw: unknown): Project {
     updatedAt: str(raw.updatedAt, now),
     mode: raw.mode === 'advanced' ? 'advanced' : 'quick',
     media,
-    style: oneOf(raw.style, STYLES, 'clean'),
+    style: oneOf(raw.style, STYLES, 'custom'),
     aspectRatio: oneOf(raw.aspectRatio, ASPECTS, '16:9'),
     background: parseBackground(raw.background),
     frame,
     cursor,
-    autoZoom: oneOf(raw.autoZoom, LEVELS, 'off'),
+    camera: parseCamera(raw, version),
     zooms,
     trims,
     export: exportSettings,

@@ -1,18 +1,89 @@
-import type { Background, CursorStyle, FrameStyle, StylePresetId } from './project'
+import type { Background, CursorStyle, FrameStyle, LegacyStyleId, StyleId, StylePresetId } from './project'
 
 /** A background layer description that both preview and export paint identically. */
 export type BackgroundLayer =
   | { type: 'linear'; angle: number; stops: Array<[number, string]> }
-  | { type: 'radial'; x: number; y: number; radius: number; color: string }
+  /**
+   * `soft` fades to the same colour at zero alpha. Without it the gradient fades to
+   * transparent black (the 0.1 behaviour, which greys light colours; kept for classic presets).
+   */
+  | { type: 'radial'; x: number; y: number; radius: number; color: string; soft?: boolean }
+  /** Darkens/tints the edges; transparent in the centre. */
+  | { type: 'vignette'; color: string; inner: number; outer: number }
+  /** Deterministic film/paper grain from a seeded generator (never random per frame). */
+  | { type: 'grain'; amount: number; seed: number }
 
 export interface BackgroundPreset {
   id: string
   name: string
   base: string
   layers: BackgroundLayer[]
+  /** 'signature' presets belong to the 2.0 styles; 'classic' are the 0.1 gradients. */
+  group?: 'signature' | 'classic'
 }
 
-export const BACKGROUND_PRESETS: readonly BackgroundPreset[] = [
+export const SIGNATURE_BACKGROUNDS: readonly BackgroundPreset[] = [
+  {
+    id: 'studio',
+    name: 'Studio',
+    group: 'signature',
+    base: '#E6E7EA',
+    layers: [
+      { type: 'linear', angle: 165, stops: [[0, '#F3F4F6'], [1, '#D9DBE0']] },
+      { type: 'radial', x: 0.18, y: 0.08, radius: 0.75, soft: true, color: 'rgba(255,255,255,0.55)' },
+    ],
+  },
+  {
+    id: 'ivory',
+    name: 'Ivory',
+    group: 'signature',
+    base: '#F2ECE1',
+    layers: [
+      { type: 'linear', angle: 172, stops: [[0, '#F8F4EC'], [1, '#EBE2D3']] },
+      { type: 'radial', x: 0.5, y: -0.05, radius: 0.85, soft: true, color: 'rgba(255,253,248,0.7)' },
+      { type: 'vignette', color: 'rgba(150,120,85,0.10)', inner: 0.35, outer: 0.78 },
+    ],
+  },
+  {
+    id: 'aura',
+    name: 'Aura',
+    group: 'signature',
+    base: '#ECE6F4',
+    layers: [
+      { type: 'radial', x: 0.12, y: 0.18, radius: 0.72, soft: true, color: 'rgba(170,154,207,0.85)' },
+      { type: 'radial', x: 0.9, y: 0.2, radius: 0.62, soft: true, color: 'rgba(141,178,236,0.62)' },
+      { type: 'radial', x: 0.78, y: 0.95, radius: 0.7, soft: true, color: 'rgba(231,169,154,0.72)' },
+      { type: 'radial', x: 0.18, y: 0.98, radius: 0.55, soft: true, color: 'rgba(236,170,206,0.55)' },
+      { type: 'radial', x: 0.5, y: 0.5, radius: 0.45, soft: true, color: 'rgba(255,255,255,0.28)' },
+    ],
+  },
+  {
+    id: 'paper',
+    name: 'Paper',
+    group: 'signature',
+    base: '#E6D8BD',
+    layers: [
+      { type: 'linear', angle: 175, stops: [[0, '#EEE3CC'], [1, '#DDCBA8']] },
+      { type: 'radial', x: 0.3, y: 0.15, radius: 0.7, soft: true, color: 'rgba(250,244,230,0.55)' },
+      { type: 'vignette', color: 'rgba(110,80,40,0.16)', inner: 0.38, outer: 0.88 },
+      { type: 'grain', amount: 0.1, seed: 7 },
+    ],
+  },
+  {
+    id: 'midnight',
+    name: 'Midnight',
+    group: 'signature',
+    base: '#0F1116',
+    layers: [
+      { type: 'linear', angle: 160, stops: [[0, '#1B1E28'], [1, '#0B0C11']] },
+      { type: 'radial', x: 0.5, y: 0.42, radius: 0.55, soft: true, color: 'rgba(170,154,207,0.17)' },
+      { type: 'vignette', color: 'rgba(0,0,0,0.38)', inner: 0.4, outer: 0.9 },
+    ],
+  },
+]
+
+/** The eight 0.1 gradients, kept so older projects render unchanged and as palette options. */
+export const CLASSIC_BACKGROUNDS: readonly BackgroundPreset[] = [
   {
     id: 'aurora',
     name: 'Aurora',
@@ -88,7 +159,9 @@ export const BACKGROUND_PRESETS: readonly BackgroundPreset[] = [
       { type: 'radial', x: 0.85, y: 0.85, radius: 0.75, color: 'rgba(255,120,200,0.45)' },
     ],
   },
-] as const
+]
+
+export const BACKGROUND_PRESETS: readonly BackgroundPreset[] = [...SIGNATURE_BACKGROUNDS, ...CLASSIC_BACKGROUNDS.map((p) => ({ ...p, group: 'classic' as const }))]
 
 export const SOLID_COLORS: readonly string[] = [
   '#0f1115',
@@ -115,42 +188,74 @@ export function resolveBackground(bg: Background): BackgroundPreset {
   return findBackgroundPreset(bg.presetId)
 }
 
+/** A 2.0 art direction: a curated backdrop and frame. Camera and cursor are independent. */
 export interface StylePreset {
-  id: StylePresetId
+  id: StyleId
   name: string
   description: string
+  background: Background
+  frame: FrameStyle
+}
+
+export const STYLE_PRESETS: readonly StylePreset[] = [
+  {
+    id: 'editorial',
+    name: 'Editorial',
+    description: 'Warm ivory, soft warm shadow',
+    background: { kind: 'preset', presetId: 'ivory' },
+    frame: { padding: 0.095, radius: 18, shadow: 0.62, scale: 1, shadowTint: '#5C4630' },
+  },
+  {
+    id: 'studio',
+    name: 'Studio',
+    description: 'Neutral and professional',
+    background: { kind: 'preset', presetId: 'studio' },
+    frame: { padding: 0.075, radius: 14, shadow: 0.55, scale: 1, shadowTint: '#1E2430' },
+  },
+  {
+    id: 'aura',
+    name: 'Aura',
+    description: 'Luminous colour, quiet frame',
+    background: { kind: 'preset', presetId: 'aura' },
+    frame: { padding: 0.085, radius: 20, shadow: 0.5, scale: 1, shadowTint: '#3B325F' },
+  },
+  {
+    id: 'canvas',
+    name: 'Canvas',
+    description: 'Paper grain, matte contact shadow',
+    background: { kind: 'preset', presetId: 'paper' },
+    frame: { padding: 0.09, radius: 10, shadow: 0.42, scale: 1, shadowTint: '#4A3824' },
+  },
+  {
+    id: 'midnight',
+    name: 'Midnight',
+    description: 'Cinematic dark, gentle glow',
+    background: { kind: 'preset', presetId: 'midnight' },
+    frame: { padding: 0.07, radius: 14, shadow: 0.75, scale: 1, shadowTint: '#8C7AC4' },
+  },
+]
+
+export const DEFAULT_STYLE: StyleId = 'editorial'
+
+/** 0.1 presets. Only used to create legacy-identical projects in tests and to name old styles. */
+export interface LegacyStylePreset {
+  id: LegacyStyleId
+  name: string
   background: Background
   frame: FrameStyle
   cursor: Pick<CursorStyle, 'size' | 'smoothing' | 'clickEffect'>
 }
 
-export const STYLE_PRESETS: readonly StylePreset[] = [
-  {
-    id: 'clean',
-    name: 'Clean',
-    description: 'Soft gradient, generous padding',
-    background: { kind: 'preset', presetId: 'aurora' },
-    frame: { padding: 0.08, radius: 18, shadow: 0.7, scale: 1 },
-    cursor: { size: 1.4, smoothing: 0.6, clickEffect: true },
-  },
-  {
-    id: 'minimal',
-    name: 'Minimal',
-    description: 'Quiet backdrop, tight framing',
-    background: { kind: 'preset', presetId: 'graphite' },
-    frame: { padding: 0.045, radius: 12, shadow: 0.45, scale: 1 },
-    cursor: { size: 1.2, smoothing: 0.5, clickEffect: false },
-  },
-  {
-    id: 'colorful',
-    name: 'Colorful',
-    description: 'Vivid gradient, bold shadow',
-    background: { kind: 'preset', presetId: 'dusk' },
-    frame: { padding: 0.1, radius: 24, shadow: 0.9, scale: 1 },
-    cursor: { size: 1.5, smoothing: 0.65, clickEffect: true },
-  },
+export const LEGACY_STYLE_PRESETS: readonly LegacyStylePreset[] = [
+  { id: 'clean', name: 'Clean', background: { kind: 'preset', presetId: 'aurora' }, frame: { padding: 0.08, radius: 18, shadow: 0.7, scale: 1 }, cursor: { size: 1.4, smoothing: 0.6, clickEffect: true } },
+  { id: 'minimal', name: 'Minimal', background: { kind: 'preset', presetId: 'graphite' }, frame: { padding: 0.045, radius: 12, shadow: 0.45, scale: 1 }, cursor: { size: 1.2, smoothing: 0.5, clickEffect: false } },
+  { id: 'colorful', name: 'Colorful', background: { kind: 'preset', presetId: 'dusk' }, frame: { padding: 0.1, radius: 24, shadow: 0.9, scale: 1 }, cursor: { size: 1.5, smoothing: 0.65, clickEffect: true } },
 ]
 
-export function findStylePreset(id: StylePresetId): StylePreset {
-  return STYLE_PRESETS.find((p) => p.id === id) ?? STYLE_PRESETS[0]!
+export function findStylePreset(id: StylePresetId): StylePreset | null {
+  return STYLE_PRESETS.find((p) => p.id === id) ?? null
+}
+
+export function styleName(id: StylePresetId): string {
+  return findStylePreset(id)?.name ?? LEGACY_STYLE_PRESETS.find((p) => p.id === id)?.name ?? 'Custom'
 }
