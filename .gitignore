@@ -1,0 +1,17 @@
+node_modules/
+out/
+dist/
+release/
+coverage/
+*.log
+.DS_Store
+native/macos/build/
+resources/bin/
+test-fixtures/
+test-results/
+playwright-report/
+tests/.artifacts/
+*.mp4
+*.webm
+*.mov
+!docs/media/*.mp4
