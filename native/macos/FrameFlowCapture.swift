@@ -205,6 +205,8 @@ final class MovieWriter {
     private(set) var framesWritten = 0
     private(set) var framesDropped = 0
     private let queue = DispatchQueue(label: "frameflow.writer")
+    /// Frames closer together than half a frame interval are bursts; keep the stream at <= fps.
+    private var minFrameSpacing = CMTime(value: 1, timescale: 120)
 
     init(url: URL, width: Int, height: Int, fps: Int, audio: Bool) throws {
         self.url = url
@@ -212,6 +214,9 @@ final class MovieWriter {
         writer = try AVAssetWriter(outputURL: url, fileType: .mp4)
         // Write in fragments so a crash still leaves a playable file.
         writer.movieFragmentInterval = CMTime(seconds: 2, preferredTimescale: 600)
+        // Fine-grained timescale so variable-rate capture timestamps are preserved exactly.
+        writer.movieTimeScale = 60_000
+        minFrameSpacing = CMTime(value: 1, timescale: CMTimeScale(fps * 2))
         let bitrate = min(60_000_000, max(8_000_000, Int(Double(width * height * fps) * 0.12)))
         let settings: [String: Any] = [
             AVVideoCodecKey: AVVideoCodecType.h264,
@@ -232,6 +237,7 @@ final class MovieWriter {
         ]
         videoInput = AVAssetWriterInput(mediaType: .video, outputSettings: settings)
         videoInput.expectsMediaDataInRealTime = true
+        videoInput.mediaTimeScale = 60_000
         guard writer.canAdd(videoInput) else { throw NSError(domain: "FrameFlow", code: 1, userInfo: [NSLocalizedDescriptionKey: "Cannot add video track"]) }
         writer.add(videoInput)
         if audio {
@@ -260,7 +266,7 @@ final class MovieWriter {
                 firstPTS = pts
             }
             guard writer.status == .writing else { return }
-            if lastPTS.isValid && pts <= lastPTS { return }
+            if lastPTS.isValid && pts < lastPTS + minFrameSpacing { return }
             if videoInput.isReadyForMoreMediaData {
                 if videoInput.append(sb) {
                     framesWritten += 1
@@ -411,7 +417,8 @@ final class RecordingSession: NSObject, SCStreamOutput, SCStreamDelegate {
             cursor = c
         }
         try await s.startCapture()
-        await MainActor.run { announceStarted(microphone: wantsMic) }
+        let micEnabled = wantsMic
+        await MainActor.run { announceStarted(microphone: micEnabled) }
     }
 
     @MainActor private func announceStarted(microphone: Bool) {

@@ -39,7 +39,7 @@ export function probe(file: string): ProbeInfo {
 
 /** Fully decodes a file; returns decoder errors (empty = clean). */
 export function decodeErrors(file: string): string {
-  const r = spawnSync(FFMPEG, ['-v', 'error', '-i', file, '-f', 'null', '-'], { encoding: 'utf8' })
+  const r = spawnSync(FFMPEG, ['-v', 'error', '-i', file, '-fps_mode', 'passthrough', '-enc_time_base', '-1', '-f', 'null', '-'], { encoding: 'utf8' })
   return (r.stderr ?? '').trim()
 }
 
