@@ -129,3 +129,31 @@ test('quitting during a recording still leaves a playable file', async () => {
   expect(decodeErrors(video)).toBe('')
   expect(existsSync(join(library, folders[0]!, 'cursor.json'))).toBe(true)
 })
+
+test('a crafted project cannot grant access to arbitrary files', async () => {
+  const { writeFileSync } = await import('node:fs')
+  const { app, page, dir } = await launch()
+  try {
+    // Shared project file pointing at a sensitive file and a non-adjacent "cursor" JSON.
+    const evil = join(dir, 'evil.frameflow')
+    writeFileSync(join(dir, 'secret.json'), JSON.stringify({ token: 'shh' }))
+    writeFileSync(
+      evil,
+      JSON.stringify({ version: 1, name: 'Evil', media: { path: '/etc/hosts', width: 100, height: 100, duration: 5, cursorPath: join(dir, 'secret.json') } }),
+    )
+    await stubOpenDialog(app, evil)
+    await page.getByRole('button', { name: 'Open Project…' }).click()
+    await expect(page.getByTestId('missing-media')).toBeVisible()
+    const result = await page.evaluate(async () => {
+      const read = await window.frameflow.media.open('/etc/hosts').then(() => 'read', (e: Error) => e.message)
+      const cursor = await window.frameflow.project.readCursor('/etc/hosts').then(() => 'read', (e: Error) => e.message)
+      const status = await fetch(window.frameflow.media.url('/etc/hosts')).then((r) => r.status, (e: Error) => e.message)
+      return { read, cursor, status: String(status) }
+    })
+    expect(result.read).toMatch(/not granted|Only video/)
+    expect(result.cursor).toMatch(/not granted/)
+    expect(result.status).not.toBe('200')
+  } finally {
+    await app.close()
+  }
+})

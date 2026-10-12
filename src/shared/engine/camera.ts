@@ -41,7 +41,7 @@ export function zoomWeight(z: ZoomEvent, t: number): number {
 export function effectiveZooms(zooms: readonly ZoomEvent[]): ZoomEvent[] {
   const manual = zooms.filter((z) => z.origin === 'manual')
   return zooms
-    .filter((z) => z.end - z.start >= MIN_ZOOM_DURATION)
+    .filter((z) => z.end - z.start >= MIN_ZOOM_DURATION - 1e-6)
     .filter((z) => z.origin === 'manual' || !manual.some((m) => m.start < z.end && z.start < m.end))
     .slice()
     .sort((a, b) => a.start - b.start)

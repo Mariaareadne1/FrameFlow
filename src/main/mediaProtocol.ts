@@ -3,7 +3,7 @@ import { Readable } from 'node:stream'
 import { extname } from 'node:path'
 import { protocol } from 'electron'
 import { MEDIA_SCHEME, pathFromMediaUrl } from '@shared/ipc'
-import { isReadable } from './access'
+import { isReadable, isVideoPath } from './access'
 
 const CORS = { 'Access-Control-Allow-Origin': '*' }
 
@@ -29,7 +29,7 @@ export function registerMediaScheme(): void {
 export function handleMediaScheme(): void {
   protocol.handle(MEDIA_SCHEME, async (request) => {
     const path = pathFromMediaUrl(request.url)
-    if (!path || !isReadable(path)) return new Response('Forbidden', { status: 403 })
+    if (!path || !isVideoPath(path) || !isReadable(path)) return new Response('Forbidden', { status: 403 })
     let size: number
     try {
       size = (await fs.stat(path)).size

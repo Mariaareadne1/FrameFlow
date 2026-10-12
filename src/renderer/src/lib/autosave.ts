@@ -11,7 +11,15 @@ export function setThumbnailProvider(fn: (() => string | null) | null): void {
   thumbnailProvider = fn
 }
 
-export async function saveNow(): Promise<void> {
+let inFlight: Promise<void> = Promise.resolve()
+
+/** Saves the current project. Calls are serialized so overlapping saves never race. */
+export function saveNow(): Promise<void> {
+  inFlight = inFlight.then(saveLatest, saveLatest)
+  return inFlight
+}
+
+async function saveLatest(): Promise<void> {
   const { project, projectPath, markSaved } = useEditor.getState()
   if (!project || !projectPath) return
   try {

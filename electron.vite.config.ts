@@ -20,7 +20,16 @@ export default defineConfig({
     resolve: {
       alias: { ...sharedAlias, '@renderer': resolve(__dirname, 'src/renderer/src') },
     },
-    plugins: [react(), tailwindcss()],
+    plugins: [
+      react(),
+      tailwindcss(),
+      {
+        // The dev server's HMR websocket is not needed (or allowed) in production builds.
+        name: 'frameflow-strip-dev-csp',
+        apply: 'build',
+        transformIndexHtml: (html: string) => html.replace(' ws://localhost:*', ''),
+      },
+    ],
     build: { rollupOptions: { input: resolve(__dirname, 'src/renderer/index.html') } },
   },
 })

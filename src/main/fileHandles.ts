@@ -1,15 +1,18 @@
 import { promises as fs } from 'node:fs'
 import type { FileHandle } from 'node:fs/promises'
-import { assertExportable, assertReadable } from './access'
+import { assertReadable, consumeExportGrant, isVideoPath } from './access'
 
 /** Random-access read handles used by the exporter's demuxer. */
 const readers = new Map<number, FileHandle>()
 let nextReader = 1
 
 const MAX_READ = 64 * 1024 * 1024
+/** Hard ceiling for a single export file (well above any realistic demo). */
+const MAX_EXPORT_BYTES = 64 * 1024 * 1024 * 1024
 
 export async function openReader(path: string): Promise<{ handle: number; size: number }> {
   const p = assertReadable(path)
+  if (!isVideoPath(p)) throw new Error('Only video files can be opened.')
   const fh = await fs.open(p, 'r')
   const { size } = await fh.stat()
   const handle = nextReader++
@@ -47,9 +50,11 @@ const writers = new Map<number, Writer>()
 let nextWriter = 1
 
 export async function beginExport(path: string): Promise<number> {
-  const dest = assertExportable(path)
+  const dest = consumeExportGrant(path)
   const temp = `${dest}.partial`
-  const fh = await fs.open(temp, 'w')
+  // Remove a stale partial (or a planted symlink) and create exclusively, never following links.
+  await fs.rm(temp, { force: true })
+  const fh = await fs.open(temp, 'wx')
   const handle = nextWriter++
   writers.set(handle, { fh, dest, temp })
   return handle
@@ -58,7 +63,7 @@ export async function beginExport(path: string): Promise<number> {
 export async function writeExport(handle: number, position: number, data: Uint8Array): Promise<void> {
   const w = writers.get(handle)
   if (!w) throw new Error('Export is not active.')
-  if (!Number.isInteger(position) || position < 0) throw new Error('Invalid write position.')
+  if (!Number.isInteger(position) || position < 0 || position + data.byteLength > MAX_EXPORT_BYTES) throw new Error('Invalid write position.')
   await w.fh.write(data, 0, data.byteLength, position)
 }
 

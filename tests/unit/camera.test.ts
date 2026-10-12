@@ -149,3 +149,12 @@ describe('chained zooms', () => {
     expect(cameraAt([a, b], null, 3.5).scale).toBe(1)
   })
 })
+
+describe('minimum-length zooms', () => {
+  test('a zoom exactly MIN_ZOOM_DURATION long is not dropped by float error', () => {
+    for (const start of [0.03, 0.15, 0.16, 7.77]) {
+      const z = zoom({ start, end: start + 0.3 })
+      expect(effectiveZooms([z])).toHaveLength(1)
+    }
+  })
+})

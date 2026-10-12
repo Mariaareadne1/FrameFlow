@@ -71,9 +71,11 @@ export function Timeline() {
     const up = () => {
       el.removeEventListener('pointermove', move)
       el.removeEventListener('pointerup', up)
+      el.removeEventListener('pointercancel', up)
     }
     el.addEventListener('pointermove', move)
     el.addEventListener('pointerup', up)
+    el.addEventListener('pointercancel', up)
   }
 
   // ---- Dragging blocks ----
@@ -89,20 +91,32 @@ export function Timeline() {
     const dt = (e.clientX - d.originX) / pxPerSecond
     let start = d.start
     let end = d.end
+    const floor = Math.min(0.3, d.end - d.start)
+    // Cuts may not be dragged into a neighbouring cut (that would merge them mid-gesture).
+    let lo = 0
+    let hi = duration
+    if (d.kind === 'trim') {
+      for (const t of project.trims) {
+        if (t.id === d.id) continue
+        if (t.end <= d.start + 1e-6) lo = Math.max(lo, t.end + 0.05)
+        if (t.start >= d.end - 1e-6) hi = Math.min(hi, t.start - 0.05)
+      }
+    }
     if (d.mode === 'move') {
       const len = d.end - d.start
-      start = Math.max(0, Math.min(duration - len, d.start + dt))
+      start = Math.max(lo, Math.min(hi - len, d.start + dt))
       end = start + len
     } else if (d.mode === 'start') {
-      start = Math.max(0, Math.min(d.end - 0.3, d.start + dt))
+      start = Math.max(lo, Math.min(d.end - floor, d.start + dt))
     } else {
-      end = Math.min(duration, Math.max(d.start + 0.3, d.end + dt))
+      end = Math.min(hi, Math.max(d.start + floor, d.end + dt))
     }
     const key = `drag-${d.kind}-${d.id}`
     if (d.kind === 'zoom') apply((p) => updateZoom(p, d.id, { start, end }), key)
     else apply((p) => updateTrim(p, d.id, { start, end }), key)
   }
   const endDrag = () => {
+    if (dragRef.current) useEditor.getState().endGesture()
     dragRef.current = null
   }
 
@@ -194,6 +208,7 @@ export function Timeline() {
               className="relative h-full"
               style={{ width: contentWidth }}
               onDoubleClick={(e) => {
+                if (e.target !== e.currentTarget) return
                 const t = timeFromEvent(e, e.currentTarget)
                 const { project: p, zoom } = addManualZoom(project, t, !!track)
                 apply(() => p)

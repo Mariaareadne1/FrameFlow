@@ -24,11 +24,8 @@ export function MissingMedia() {
         toast('error', `That video is ${probe.duration.toFixed(1)}s long, but this project expects ${project.media.duration.toFixed(1)}s. Choose the original recording.`)
         return
       }
-      useEditor.setState((s) => ({
-        project: s.project ? { ...s.project, media: { ...s.project.media, path: file, width: probe.width, height: probe.height } } : s.project,
-        mediaMissing: false,
-        dirty: true,
-      }))
+      useEditor.getState().patchAll((p) => ({ ...p, media: { ...p.media, path: file, width: probe.width, height: probe.height } }))
+      useEditor.setState({ mediaMissing: false })
       toast('success', 'Video relinked.')
     } catch (err) {
       toast('error', errorMessage(err))

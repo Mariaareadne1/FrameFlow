@@ -1,13 +1,22 @@
 import { promises as fs, existsSync } from 'node:fs'
-import { dirname, join } from 'node:path'
+import { dirname, isAbsolute, join, relative } from 'node:path'
 import { app, dialog, BrowserWindow } from 'electron'
 import { PROJECT_FILE_EXTENSION, type Project, type RecentProject } from '@shared/project'
 import { parseProject } from '@shared/projectModel'
 import type { OpenedProject } from '@shared/ipc'
-import { allowProject, allowRead, assertProject, canonical, isReadable } from './access'
+import { allowProject, allowRead, assertProject, canonical, isReadable, isVideoPath } from './access'
 import { libraryPath, safeName, timestampLabel } from './library'
 
 const MAX_RECENTS = 24
+let tmpCounter = 0
+let recentsQueue: Promise<unknown> = Promise.resolve()
+
+/** Serializes read-modify-write of the recents file. */
+function withRecents<T>(fn: () => Promise<T>): Promise<T> {
+  const next = recentsQueue.then(fn, fn)
+  recentsQueue = next.catch(() => undefined)
+  return next
+}
 const MAX_THUMBNAIL = 400_000
 /** Folders created by the recorder; projects may be created inside them. */
 const ownedFolders = new Set<string>()
@@ -38,12 +47,16 @@ async function writeRecents(list: RecentProject[]): Promise<void> {
 
 async function atomicWrite(path: string, contents: string): Promise<void> {
   await fs.mkdir(dirname(path), { recursive: true })
-  const tmp = `${path}.${process.pid}.tmp`
+  const tmp = `${path}.${process.pid}.${++tmpCounter}.tmp`
   await fs.writeFile(tmp, contents, 'utf8')
   await fs.rename(tmp, path)
 }
 
-async function touchRecent(path: string, project: Project, thumbnail: string | null): Promise<void> {
+function touchRecent(path: string, project: Project, thumbnail: string | null): Promise<void> {
+  return withRecents(() => touchRecentNow(path, project, thumbnail))
+}
+
+async function touchRecentNow(path: string, project: Project, thumbnail: string | null): Promise<void> {
   const list = await readRecents()
   const previous = list.find((r) => r.path === path)
   const entry: RecentProject = {
@@ -99,6 +112,49 @@ export async function saveProjectAs(win: BrowserWindow | null, project: Project,
   return canonical(path)
 }
 
+const MAX_CURSOR_FILE = 100 * 1024 * 1024
+
+function isInside(child: string, parent: string): boolean {
+  const rel = relative(parent, child)
+  return rel !== '' && !rel.startsWith('..') && !isAbsolute(rel)
+}
+
+async function realFile(p: string): Promise<string | null> {
+  try {
+    const real = await fs.realpath(canonical(p))
+    return (await fs.stat(real)).isFile() ? real : null
+  } catch {
+    return null
+  }
+}
+
+/**
+ * Project files are untrusted input (they can be shared). A project may only grant access to
+ * its video when that is clearly safe: the path is a video file AND either the project lives
+ * in the FrameFlow library, the video sits in the project's own folder, or this project was
+ * previously saved/opened by FrameFlow (it is in Recents). Otherwise the user must confirm the
+ * video through a file dialog ("Locate Video…").
+ */
+async function trustedMediaPath(projectPath: string, mediaPath: string, recents: RecentProject[]): Promise<string | null> {
+  if (!isVideoPath(mediaPath)) return null
+  const media = await realFile(mediaPath)
+  if (!media) return null
+  const projectDir = dirname(projectPath)
+  const library = canonical(libraryPath())
+  const trusted = isInside(projectPath, library) || isInside(media, projectDir) || recents.some((r) => r.path === projectPath)
+  return trusted ? media : null
+}
+
+/** Cursor data must be a regular, reasonably sized .json file next to the video. */
+async function readTrustedCursor(cursorPath: string, mediaPath: string): Promise<unknown> {
+  if (!cursorPath.toLowerCase().endsWith('.json')) return null
+  const real = await realFile(cursorPath)
+  if (!real || dirname(real) !== dirname(mediaPath)) return null
+  if ((await fs.stat(real)).size > MAX_CURSOR_FILE) return null
+  allowRead(real)
+  return JSON.parse(await fs.readFile(real, 'utf8'))
+}
+
 export async function openProject(path: string): Promise<OpenedProject> {
   const p = canonical(path)
   if (!p.endsWith(`.${PROJECT_FILE_EXTENSION}`)) throw new Error('Not a FrameFlow project file.')
@@ -111,17 +167,16 @@ export async function openProject(path: string): Promise<OpenedProject> {
   }
   const project = parseProject(raw)
   allowProject(p)
-  allowRead(project.media.path)
+  const recents = await readRecents()
+  const media = await trustedMediaPath(p, project.media.path, recents)
   let cursor: unknown = null
-  if (project.media.cursorPath) {
-    try {
-      cursor = JSON.parse(await fs.readFile(canonical(project.media.cursorPath), 'utf8'))
-    } catch {
-      cursor = null
-    }
+  if (media) {
+    allowRead(media)
+    allowRead(project.media.path)
+    if (project.media.cursorPath) cursor = await readTrustedCursor(project.media.cursorPath, media).catch(() => null)
   }
   await touchRecent(p, project, null)
-  return { path: p, project, mediaMissing: !existsSync(project.media.path), cursor }
+  return { path: p, project, mediaMissing: !media, cursor }
 }
 
 export async function chooseAndOpenProject(win: BrowserWindow | null): Promise<OpenedProject | null> {
@@ -140,16 +195,19 @@ export async function chooseAndOpenProject(win: BrowserWindow | null): Promise<O
 export async function listRecents(): Promise<RecentProject[]> {
   const list = await readRecents()
   // Hide entries whose project file disappeared, but keep them on disk (drives can be unplugged).
-  return list.filter((r) => existsSync(r.path))
+  return list.filter((r) => r.path.endsWith(`.${PROJECT_FILE_EXTENSION}`) && existsSync(r.path))
 }
 
 export async function forgetRecent(path: string): Promise<void> {
-  const list = await readRecents()
-  await writeRecents(list.filter((r) => r.path !== path))
+  await withRecents(async () => {
+    const list = await readRecents()
+    await writeRecents(list.filter((r) => r.path !== path))
+  })
 }
 
 export async function readCursorFile(path: string): Promise<unknown> {
   const p = canonical(path)
-  if (!isReadable(p)) throw new Error('Access to this file was not granted.')
+  if (!isReadable(p) || !p.endsWith('.json')) throw new Error('Access to this file was not granted.')
+  if ((await fs.stat(p)).size > MAX_CURSOR_FILE) throw new Error('Cursor data is too large.')
   return JSON.parse(await fs.readFile(p, 'utf8'))
 }

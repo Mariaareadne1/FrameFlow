@@ -1,5 +1,6 @@
-import { BrowserWindow, screen, shell } from 'electron'
+import { app, BrowserWindow, screen, shell } from 'electron'
 import { join } from 'node:path'
+import { pathToFileURL } from 'node:url'
 
 const preload = join(__dirname, '../preload/index.cjs')
 
@@ -11,6 +12,13 @@ function loadRoute(win: BrowserWindow, route: string): void {
   }
 }
 
+/** True only for FrameFlow's own renderer page (dev server or bundled index.html). */
+export function isAppUrl(url: string): boolean {
+  const dev = process.env.ELECTRON_RENDERER_URL
+  if (dev && !app.isPackaged) return url.startsWith(dev)
+  return url.split('#')[0] === pathToFileURL(join(__dirname, '../renderer/index.html')).href
+}
+
 function harden(win: BrowserWindow): void {
   // Never navigate away from the app or open new windows from content.
   win.webContents.setWindowOpenHandler(({ url }) => {
@@ -18,9 +26,15 @@ function harden(win: BrowserWindow): void {
     return { action: 'deny' }
   })
   win.webContents.on('will-navigate', (event, url) => {
-    const allowed = process.env.ELECTRON_RENDERER_URL ? url.startsWith(process.env.ELECTRON_RENDERER_URL) : url.startsWith('file://')
-    if (!allowed) event.preventDefault()
+    if (!isAppUrl(url)) event.preventDefault()
   })
+  win.webContents.on('will-frame-navigate', (event) => {
+    if (!isAppUrl(event.url)) event.preventDefault()
+  })
+  win.webContents.on('will-redirect', (event, url) => {
+    if (!isAppUrl(url)) event.preventDefault()
+  })
+  win.webContents.on('will-attach-webview', (event) => event.preventDefault())
 }
 
 const secureWebPreferences = {

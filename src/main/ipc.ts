@@ -3,13 +3,13 @@ import { join } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
 import { IPC, type AppInfo, type StartRecordingOptions } from '@shared/ipc'
 import type { Project } from '@shared/project'
-import { allowExport, allowRead, canonical, isReadable } from './access'
+import { VIDEO_EXTENSIONS, allowExport, allowRead, canonical, isReadable } from './access'
 import { CaptureController, listSources, openPermissionSettings, screenPermission } from './capture'
 import { abortExport, beginExport, closeReader, finishExport, openReader, readRange, writeExport } from './fileHandles'
 import { isTestMode, libraryPath, safeName } from './library'
+import { isAppUrl } from './windows'
 import { chooseAndOpenProject, createProjectPath, forgetRecent, listRecents, openProject, readCursorFile, saveProject, saveProjectAs } from './projects'
 
-const VIDEO_EXTENSIONS = ['mp4', 'mov', 'm4v', 'webm', 'mkv']
 const exported = new Set<string>()
 
 function windowOf(e: IpcMainInvokeEvent): BrowserWindow | null {
@@ -33,38 +33,52 @@ function parseStartOptions(v: unknown): StartRecordingOptions {
   return {
     source: { type, id: num(o.source?.id, 'source id') },
     microphone: o.microphone === true,
-    countdown: typeof o.countdown === 'number' ? o.countdown : 3,
+    countdown: typeof o.countdown === 'number' && Number.isFinite(o.countdown) ? Math.max(0, Math.min(10, Math.round(o.countdown))) : 3,
   }
 }
 
+/** Only our own top-level app pages may call into the main process. */
+function trustedSender(e: IpcMainInvokeEvent): boolean {
+  const frame = e.senderFrame
+  return !!frame && !frame.parent && isAppUrl(frame.url)
+}
+
 export function registerIpc(capture: CaptureController, getWindows: () => BrowserWindow[]): void {
-  ipcMain.handle(IPC.appInfo, (): AppInfo => ({ version: app.getVersion(), platform: process.platform, isTest: isTestMode(), libraryPath: libraryPath() }))
-  ipcMain.handle(IPC.reveal, (_e, p: unknown) => {
+  const original = ipcMain.handle.bind(ipcMain)
+  const handle: typeof ipcMain.handle = (channel, listener) =>
+    original(channel, (e, ...args) => {
+      if (!trustedSender(e)) throw new Error('Untrusted sender.')
+      return listener(e, ...args)
+    })
+  const ipc = { handle }
+
+  ipc.handle(IPC.appInfo, (): AppInfo => ({ version: app.getVersion(), platform: process.platform, isTest: isTestMode(), libraryPath: libraryPath() }))
+  ipc.handle(IPC.reveal, (_e, p: unknown) => {
     const path = canonical(str(p, 'path'))
     if (!isReadable(path) && !exported.has(path) && path !== canonical(libraryPath())) throw new Error('Not allowed.')
     shell.showItemInFolder(path)
   })
 
-  ipcMain.handle(IPC.capturePermission, () => screenPermission())
-  ipcMain.handle(IPC.captureOpenSettings, () => openPermissionSettings())
-  ipcMain.handle(IPC.captureList, () => listSources(getWindows()))
-  ipcMain.handle(IPC.captureStart, (_e, opts: unknown) => capture.start(parseStartOptions(opts)))
-  ipcMain.handle(IPC.captureStop, () => capture.stop())
-  ipcMain.handle(IPC.captureCancel, () => capture.cancel())
+  ipc.handle(IPC.capturePermission, () => screenPermission())
+  ipc.handle(IPC.captureOpenSettings, () => openPermissionSettings())
+  ipc.handle(IPC.captureList, () => listSources(getWindows()))
+  ipc.handle(IPC.captureStart, (_e, opts: unknown) => capture.start(parseStartOptions(opts)))
+  ipc.handle(IPC.captureStop, () => capture.stop())
+  ipc.handle(IPC.captureCancel, () => capture.cancel())
 
-  ipcMain.handle(IPC.mediaOpen, (_e, p: unknown) => openReader(str(p, 'path')))
-  ipcMain.handle(IPC.mediaRead, (_e, h: unknown, s: unknown, end: unknown) => readRange(num(h, 'handle'), num(s, 'start'), num(end, 'end')))
-  ipcMain.handle(IPC.mediaClose, (_e, h: unknown) => closeReader(num(h, 'handle')))
-  ipcMain.handle(IPC.mediaExists, (_e, p: unknown) => {
+  ipc.handle(IPC.mediaOpen, (_e, p: unknown) => openReader(str(p, 'path')))
+  ipc.handle(IPC.mediaRead, (_e, h: unknown, s: unknown, end: unknown) => readRange(num(h, 'handle'), num(s, 'start'), num(end, 'end')))
+  ipc.handle(IPC.mediaClose, (_e, h: unknown) => closeReader(num(h, 'handle')))
+  ipc.handle(IPC.mediaExists, (_e, p: unknown) => {
     const path = canonical(str(p, 'path'))
     return isReadable(path) && existsSync(path)
   })
-  ipcMain.handle(IPC.mediaChoose, async (e) => {
+  ipc.handle(IPC.mediaChoose, async (e) => {
     const win = windowOf(e)
     const opts = {
       title: 'Choose a Video',
       properties: ['openFile' as const],
-      filters: [{ name: 'Videos', extensions: VIDEO_EXTENSIONS }],
+      filters: [{ name: 'Videos', extensions: [...VIDEO_EXTENSIONS] }],
     }
     const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
     const file = res.filePaths[0]
@@ -73,18 +87,18 @@ export function registerIpc(capture: CaptureController, getWindows: () => Browse
     return canonical(file)
   })
 
-  ipcMain.handle(IPC.projectCreatePath, (_e, name: unknown, folder: unknown) =>
+  ipc.handle(IPC.projectCreatePath, (_e, name: unknown, folder: unknown) =>
     createProjectPath(str(name, 'name'), typeof folder === 'string' ? folder : undefined),
   )
-  ipcMain.handle(IPC.projectSave, (_e, p: unknown, project: unknown, thumb: unknown) => saveProject(str(p, 'path'), project as Project, thumb))
-  ipcMain.handle(IPC.projectSaveAs, (e, project: unknown, thumb: unknown) => saveProjectAs(windowOf(e), project as Project, thumb))
-  ipcMain.handle(IPC.projectOpen, (_e, p: unknown) => openProject(str(p, 'path')))
-  ipcMain.handle(IPC.projectChooseOpen, (e) => chooseAndOpenProject(windowOf(e)))
-  ipcMain.handle(IPC.projectRecent, () => listRecents())
-  ipcMain.handle(IPC.projectForget, (_e, p: unknown) => forgetRecent(str(p, 'path')))
-  ipcMain.handle(IPC.projectReadCursor, (_e, p: unknown) => readCursorFile(str(p, 'path')))
+  ipc.handle(IPC.projectSave, (_e, p: unknown, project: unknown, thumb: unknown) => saveProject(str(p, 'path'), project as Project, thumb))
+  ipc.handle(IPC.projectSaveAs, (e, project: unknown, thumb: unknown) => saveProjectAs(windowOf(e), project as Project, thumb))
+  ipc.handle(IPC.projectOpen, (_e, p: unknown) => openProject(str(p, 'path')))
+  ipc.handle(IPC.projectChooseOpen, (e) => chooseAndOpenProject(windowOf(e)))
+  ipc.handle(IPC.projectRecent, () => listRecents())
+  ipc.handle(IPC.projectForget, (_e, p: unknown) => forgetRecent(str(p, 'path')))
+  ipc.handle(IPC.projectReadCursor, (_e, p: unknown) => readCursorFile(str(p, 'path')))
 
-  ipcMain.handle(IPC.exportChoose, async (e, name: unknown) => {
+  ipc.handle(IPC.exportChoose, async (e, name: unknown) => {
     const win = windowOf(e)
     const opts = {
       title: 'Export Video',
@@ -98,13 +112,13 @@ export function registerIpc(capture: CaptureController, getWindows: () => Browse
     allowExport(path)
     return canonical(path)
   })
-  ipcMain.handle(IPC.exportBegin, (_e, p: unknown) => beginExport(str(p, 'path')))
-  ipcMain.handle(IPC.exportWrite, (_e, h: unknown, pos: unknown, data: unknown) => {
+  ipc.handle(IPC.exportBegin, (_e, p: unknown) => beginExport(str(p, 'path')))
+  ipc.handle(IPC.exportWrite, (_e, h: unknown, pos: unknown, data: unknown) => {
     if (!(data instanceof Uint8Array)) throw new Error('Invalid export data.')
     return writeExport(num(h, 'handle'), num(pos, 'position'), data)
   })
-  ipcMain.handle(IPC.exportFinish, async (_e, h: unknown) => {
+  ipc.handle(IPC.exportFinish, async (_e, h: unknown) => {
     exported.add(await finishExport(num(h, 'handle')))
   })
-  ipcMain.handle(IPC.exportAbort, (_e, h: unknown) => abortExport(num(h, 'handle')))
+  ipc.handle(IPC.exportAbort, (_e, h: unknown) => abortExport(num(h, 'handle')))
 }

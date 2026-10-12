@@ -69,10 +69,12 @@ export async function exportProject(options: {
   }
 
   const media = await openInput(project.media.path)
-  const handle = await api.export.begin(destination)
+  let handle: number | null = null
   let output: Output | null = null
   let finished = false
   try {
+    handle = await api.export.begin(destination)
+    const writeHandle = handle
     const videoTrack = await media.input.getPrimaryVideoTrack()
     if (!videoTrack) throw new Error('The source video has no video track.')
     const audioTrack = project.media.hasAudio ? await media.input.getPrimaryAudioTrack() : null
@@ -90,7 +92,7 @@ export async function exportProject(options: {
     let position = 0
     const writable = new WritableStream<StreamTargetChunk>({
       write: async (chunk) => {
-        await api.export.write(handle, chunk.position, chunk.data)
+        await api.export.write(writeHandle, chunk.position, chunk.data)
         position = Math.max(position, chunk.position + chunk.data.byteLength)
       },
     })
@@ -122,9 +124,12 @@ export async function exportProject(options: {
       }
       const t = plan.sourceTimeAt(i)
       if (sample) {
-        const image = sample.toCanvasImageSource()
-        renderFrame(ctx, size, { ...scene, srcW: sample.displayWidth, srcH: sample.displayHeight }, image, t)
-        sample.close()
+        try {
+          const image = sample.toCanvasImageSource()
+          renderFrame(ctx, size, { ...scene, srcW: sample.displayWidth, srcH: sample.displayHeight }, image, t)
+        } finally {
+          sample.close()
+        }
       } else {
         renderFrame(ctx, size, scene, null, t)
       }
@@ -153,13 +158,19 @@ export async function exportProject(options: {
           }
           const startFrame = Math.max(0, Math.round((from - s.timestamp) * s.sampleRate))
           const endFrame = Math.min(s.numberOfFrames, Math.round((to - s.timestamp) * s.sampleRate))
-          if (endFrame > startFrame) {
-            const piece = startFrame > 0 || endFrame < s.numberOfFrames ? s.trim(startFrame, endFrame) : s.clone()
-            piece.setTimestamp(outOffset + (Math.max(s.timestamp, from) - from))
-            await audioSource.add(piece)
-            piece.close()
+          try {
+            if (endFrame > startFrame) {
+              const piece = startFrame > 0 || endFrame < s.numberOfFrames ? s.trim(startFrame, endFrame) : s.clone()
+              try {
+                piece.setTimestamp(outOffset + (Math.max(s.timestamp, from) - from))
+                await audioSource.add(piece)
+              } finally {
+                piece.close()
+              }
+            }
+          } finally {
+            s.close()
           }
-          s.close()
         }
         outOffset += seg.end - seg.start
       }
@@ -169,7 +180,7 @@ export async function exportProject(options: {
     report({ phase: 'finalizing', fraction: 0.98, frame: plan.count, totalFrames: plan.count })
     await output.finalize()
     await writable.close().catch(() => undefined)
-    await api.export.finish(handle)
+    await api.export.finish(writeHandle)
     finished = true
     report({ phase: 'done', fraction: 1, frame: plan.count, totalFrames: plan.count })
     return {
@@ -185,7 +196,7 @@ export async function exportProject(options: {
     if (output && output.state !== 'finalized' && output.state !== 'canceled') await output.cancel().catch(() => undefined)
     throw err
   } finally {
-    if (!finished) await api.export.abort(handle).catch(() => undefined)
+    if (!finished && handle !== null) await api.export.abort(handle).catch(() => undefined)
     await media.close()
   }
 }

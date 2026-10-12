@@ -94,7 +94,9 @@ export function Preview({ project, track, className }: Props) {
     const onLoaded = () => {
       setReady(true)
       const start = playableTime(segmentsRef.current, 0)
-      video.currentTime = typeof start === 'number' ? start : 0
+      const t0 = typeof start === 'number' ? start : 0
+      video.currentTime = t0
+      usePlayhead.getState().set({ time: t0 })
     }
     const onSeeked = () => draw(video.currentTime)
     const onError = () => setError('This video could not be played. The file may be missing or in an unsupported format.')
@@ -132,8 +134,11 @@ export function Preview({ project, track, className }: Props) {
         return
       }
       if (typeof jump === 'number') {
+        // Skip drawing this tick: the old frame would be shown at the new time. 'seeked' redraws.
         video.currentTime = jump
-        t = jump
+        usePlayhead.getState().set({ time: jump })
+        raf = requestAnimationFrame(tick)
+        return
       }
       draw(t)
       usePlayhead.getState().set({ time: t })

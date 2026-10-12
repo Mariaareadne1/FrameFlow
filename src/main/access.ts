@@ -17,6 +17,13 @@ export function canonical(p: string): string {
   return normalize(resolve(p))
 }
 
+export const VIDEO_EXTENSIONS = ['mp4', 'mov', 'm4v', 'webm', 'mkv'] as const
+
+export function isVideoPath(p: string): boolean {
+  const ext = p.toLowerCase().split('.').pop() ?? ''
+  return (VIDEO_EXTENSIONS as readonly string[]).includes(ext)
+}
+
 export function allowRead(p: string): void {
   readable.add(canonical(p))
 }
@@ -39,10 +46,12 @@ export function allowExport(p: string): void {
   writableExports.add(canonical(p))
 }
 
-export function assertExportable(p: string): string {
+/** Consumes a one-time grant to write an export to `p`. */
+export function consumeExportGrant(p: string): string {
   const c = canonical(p)
   if (!writableExports.has(c)) throw new Error('Export destination was not chosen by the user.')
   if (!c.toLowerCase().endsWith('.mp4')) throw new Error('Exports must be .mp4 files.')
+  writableExports.delete(c)
   return c
 }
 

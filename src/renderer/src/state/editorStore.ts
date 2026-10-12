@@ -24,8 +24,13 @@ export interface EditorState {
   close(): void
   /** Applies an edit. Pass a `coalesce` key for continuous gestures (slider drags, timeline drags). */
   apply(fn: (p: Project) => Project, coalesce?: string): void
-  /** Replaces the project without creating an undo step (e.g. relinking media). */
-  replace(project: Project): void
+  /**
+   * Applies a change that is not an undoable edit (mode switch, relinked media) to the
+   * present AND every history entry, so undo/redo never brings stale values back.
+   */
+  patchAll(fn: (p: Project) => Project): void
+  /** Ends a continuous gesture so the next edit starts a new undo step. */
+  endGesture(): void
   undo(): void
   redo(): void
   select(selection: Selection): void
@@ -77,7 +82,13 @@ export const useEditor = create<EditorState>((set, get) => ({
     })
   },
 
-  replace: (project) => set({ project, dirty: true }),
+  patchAll: (fn) => {
+    const { project, past, future } = get()
+    if (!project) return
+    set({ project: fn(project), past: past.map(fn), future: future.map(fn), dirty: true })
+  },
+
+  endGesture: () => set({ lastEdit: null }),
 
   undo: () => {
     const { project, past, future } = get()
@@ -98,7 +109,7 @@ export const useEditor = create<EditorState>((set, get) => ({
   setMode: (mode) => {
     const { project } = get()
     if (!project || project.mode === mode) return
-    set({ project: { ...project, mode }, dirty: true })
+    get().patchAll((p) => ({ ...p, mode }))
   },
 
   markSaved: (error = null) => set({ dirty: error ? get().dirty : false, saveError: error }),

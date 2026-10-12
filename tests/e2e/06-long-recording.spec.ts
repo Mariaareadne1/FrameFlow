@@ -24,8 +24,8 @@ test('5-minute recording: opens quickly, edits stay responsive, export streams w
       media: { path: video, width: 1920, height: 1200, duration: 300, hasAudio: true, cursorPath, cursorEmbedded: false },
       cursorTrack: track,
     })
-    const projDir = join(dir, 'long')
-    mkdirSync(projDir)
+    const projDir = join(dir, 'library', 'long')
+    mkdirSync(projDir, { recursive: true })
     const projPath = join(projDir, 'Long demo.frameflow')
     writeFileSync(projPath, JSON.stringify(project))
     expect(project.zooms.length).toBeGreaterThan(10)

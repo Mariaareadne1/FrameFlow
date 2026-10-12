@@ -143,7 +143,10 @@ export class CaptureController {
     else args.push('--display', String(options.source.id))
     if (microphone) args.push('--mic')
 
-    const child = spawn(helper, args, { stdio: ['pipe', 'pipe', 'pipe'], env: process.env })
+    // The helper gets a minimal environment, not the app's.
+    const env: NodeJS.ProcessEnv = { PATH: '/usr/bin:/bin', HOME: process.env.HOME, TMPDIR: process.env.TMPDIR }
+    if (synthetic()) env.FRAMEFLOW_CAPTURE_SYNTHETIC = '1'
+    const child = spawn(helper, args, { stdio: ['pipe', 'pipe', 'pipe'], env })
     const rec: ActiveRecording = { child, folder, microphone, cancelled: false }
     this.active = rec
     this.wire(rec)
