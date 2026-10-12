@@ -15,7 +15,7 @@ export interface Launched {
   library: string
 }
 
-export async function launch(opts: { synthetic?: boolean; env?: Record<string, string>; dir?: string } = {}): Promise<Launched> {
+export async function launch(opts: { synthetic?: boolean; env?: Record<string, string>; dir?: string; executablePath?: string } = {}): Promise<Launched> {
   const dir = opts.dir ?? mkdtempSync(join(tmpdir(), 'frameflow-e2e-'))
   const library = join(dir, 'library')
   const env: Record<string, string> = {
@@ -27,7 +27,9 @@ export async function launch(opts: { synthetic?: boolean; env?: Record<string, s
     ...opts.env,
   }
   delete env.ELECTRON_RENDERER_URL
-  const app = await electron.launch({ args: [join(ROOT, 'out/main/index.js')], env, cwd: ROOT })
+  const app = opts.executablePath
+    ? await electron.launch({ executablePath: opts.executablePath, args: [], env })
+    : await electron.launch({ args: [join(ROOT, 'out/main/index.js')], env, cwd: ROOT })
   const page = await app.firstWindow()
   page.on('pageerror', (err) => console.error('[renderer error]', err))
   page.on('console', (msg) => {

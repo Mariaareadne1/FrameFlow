@@ -1,0 +1,33 @@
+appId: app.frameflow.desktop
+productName: FrameFlow
+copyright: Copyright © 2026 FrameFlow contributors
+directories:
+  output: release
+  buildResources: build
+files:
+  - out/**
+  - package.json
+  - "!**/*.map"
+extraResources:
+  - from: resources/bin
+    to: bin
+    filter:
+      - FrameFlowCapture
+asar: true
+npmRebuild: false
+mac:
+  category: public.app-category.video
+  target:
+    - target: dmg
+    - target: dir
+  icon: build/icon.png
+  minimumSystemVersion: "14.0"
+  # Unsigned local builds use an ad-hoc signature. Set CSC_LINK / CSC_NAME to sign for distribution.
+  identity: "-"
+  hardenedRuntime: false
+  gatekeeperAssess: false
+  extendInfo:
+    NSMicrophoneUsageDescription: FrameFlow records your microphone when you turn on voice narration.
+    NSScreenCaptureUsageDescription: FrameFlow records the screen or window you choose to create demo videos.
+dmg:
+  title: FrameFlow
