@@ -44,7 +44,7 @@ export function RecordSetup({ intent }: { intent: 'quick' | 'advanced' }) {
       else if (e.type === 'started') setPhase({ name: 'recording', seconds: 0 })
       else if (e.type === 'progress') setPhase({ name: 'recording', seconds: e.seconds })
       else if (e.type === 'stopping') setPhase({ name: 'stopping' })
-      else if (e.type === 'error') setPhase({ name: 'idle' })
+      else if (e.type === 'error' || e.type === 'cancelled') setPhase({ name: 'idle' })
     })
   }, [])
 

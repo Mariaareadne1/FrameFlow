@@ -25,6 +25,9 @@ function synthetic(): boolean {
 
 export function screenPermission(): PermissionState {
   if (process.platform !== 'darwin') return 'unsupported'
+  // Test hook: lets E2E tests exercise the permission-denied UI without changing OS settings.
+  const forced = process.env.FRAMEFLOW_TEST === '1' ? process.env.FRAMEFLOW_FORCE_PERMISSION : undefined
+  if (forced) return forced as PermissionState
   if (synthetic()) return 'granted'
   return systemPreferences.getMediaAccessStatus('screen') as PermissionState
 }
@@ -131,6 +134,7 @@ export class CaptureController {
     if (!proceed) {
       await fs.rm(folder, { recursive: true, force: true })
       this.restoreMain()
+      this.broadcast({ type: 'cancelled' })
       return
     }
 
@@ -218,6 +222,7 @@ export class CaptureController {
     if (rec.cancelled) {
       await fs.rm(rec.folder, { recursive: true, force: true })
       this.restoreMain()
+      this.broadcast({ type: 'cancelled' })
       return
     }
     const videoPath = String(msg.video)

@@ -37,6 +37,7 @@ export type CaptureEvent =
   | { type: 'started'; width: number; height: number }
   | { type: 'progress'; seconds: number }
   | { type: 'stopping' }
+  | { type: 'cancelled' }
   | { type: 'stopped'; result: RecordingResult }
   | { type: 'error'; code: string; message: string }
 
