@@ -159,7 +159,7 @@ export function Timeline() {
             <div className="relative cursor-text" style={{ width: contentWidth }} onPointerDown={onScrubDown} data-testid="timeline-ruler">
               {ticks.map((t) => (
                 <div key={t} className="absolute top-0 h-full border-l border-line" style={{ left: x(t) }}>
-                  <span className="ml-1 font-mono text-[10px] text-subtle">{formatTime(t)}</span>
+                  <span className="ml-1 font-mono text-[10px] text-subtle">{formatTime(t, step < 1)}</span>
                 </div>
               ))}
             </div>

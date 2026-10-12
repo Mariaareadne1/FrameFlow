@@ -112,3 +112,17 @@ describe('auto zoom', () => {
     expect(off).toEqual([manual])
   })
 })
+
+describe('auto zoom across distant interactions', () => {
+  test('clicks in different places close in time stay strong separate zooms that chain into pans', () => {
+    const steps = [{ t: 0, x: 0.5, y: 0.5 }, ...Array.from({ length: 5 }, (_, i) => ({ t: 1 + i * 2, x: i % 2 ? 0.15 : 0.85, y: i % 2 ? 0.2 : 0.8, click: true }))]
+    const tr = scriptedTrack(steps, 12)
+    const zooms = generateAutoZooms(tr, 12, 'subtle')
+    expect(zooms.length).toBeGreaterThanOrEqual(3)
+    for (const z of zooms) expect(z.scale).toBeCloseTo(1.5)
+    for (let i = 1; i < zooms.length; i++) expect(zooms[i]!.start).toBeGreaterThanOrEqual(zooms[i - 1]!.end - 1e-6)
+    // The camera stays zoomed through the sequence rather than bouncing back to 1×.
+    const ez = effectiveZooms(zooms)
+    for (let t = 2; t < 8; t += 0.1) expect(cameraAt(ez, null, t).scale).toBeGreaterThan(1.3)
+  })
+})

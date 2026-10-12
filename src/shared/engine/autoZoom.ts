@@ -71,6 +71,8 @@ export const AUTO_ZOOM_PARAMS: Record<Exclude<AutoZoomLevel, 'off'>, AutoZoomPar
 const DWELL_RADIUS = 0.015
 /** A new dwell only counts if the cursor travelled at least this far from the previous one. */
 const DWELL_MIN_TRAVEL = 0.06
+/** Shortest zoom we will create when splitting two neighbours apart. */
+const MIN_SPLIT_DURATION = 1.6
 /** Fraction of the zoomed viewport a cluster may occupy, leaving breathing room. */
 const VIEWPORT_FILL = 0.75
 
@@ -196,11 +198,17 @@ function mergeDrafts(drafts: readonly Draft[], params: AutoZoomParams): Draft[] 
   const merged: Draft[] = []
   for (const d of drafts) {
     const prev = merged[merged.length - 1]
-    if (prev && d.start - prev.end < params.mergeGap && d.end - prev.start <= params.maxDuration * 1.5) {
-      const minX = Math.min(prev.cx - prev.spanX / 2, d.cx - d.spanX / 2)
-      const maxX = Math.max(prev.cx + prev.spanX / 2, d.cx + d.spanX / 2)
-      const minY = Math.min(prev.cy - prev.spanY / 2, d.cy - d.spanY / 2)
-      const maxY = Math.max(prev.cy + prev.spanY / 2, d.cy + d.spanY / 2)
+    if (!prev || d.start - prev.end >= params.mergeGap) {
+      merged.push(d)
+      continue
+    }
+    const minX = Math.min(prev.cx - prev.spanX / 2, d.cx - d.spanX / 2)
+    const maxX = Math.max(prev.cx + prev.spanX / 2, d.cx + d.spanX / 2)
+    const minY = Math.min(prev.cy - prev.spanY / 2, d.cy - d.spanY / 2)
+    const maxY = Math.max(prev.cy + prev.spanY / 2, d.cy + d.spanY / 2)
+    const fitsTogether = Math.max(maxX - minX, maxY - minY) <= VIEWPORT_FILL / params.scale
+    if (fitsTogether && d.end - prev.start <= params.maxDuration * 1.5) {
+      // Same area: one longer zoom.
       merged[merged.length - 1] = {
         start: prev.start,
         end: Math.max(prev.end, d.end),
@@ -209,6 +217,17 @@ function mergeDrafts(drafts: readonly Draft[], params: AutoZoomParams): Draft[] 
         weight: prev.weight + d.weight,
         spanX: maxX - minX,
         spanY: maxY - minY,
+      }
+    } else if (d.start < prev.end) {
+      // Different areas close in time: keep both and meet in the middle. The camera
+      // chains them into a pan instead of zooming out and back in.
+      const mid = (prev.end + d.start) / 2
+      if (mid - prev.start >= MIN_SPLIT_DURATION && d.end - mid >= MIN_SPLIT_DURATION) {
+        merged[merged.length - 1] = { ...prev, end: mid }
+        merged.push({ ...d, start: mid })
+      } else if (d.weight > prev.weight) {
+        // Too crowded to show both well: keep the more important one.
+        merged[merged.length - 1] = d
       }
     } else {
       merged.push(d)

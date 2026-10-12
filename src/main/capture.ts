@@ -13,9 +13,10 @@ const STOP_SHORTCUT = 'CommandOrControl+Shift+2'
 const STOP_TIMEOUT_MS = 15_000
 
 function helperPath(): string {
-  const packaged = join(process.resourcesPath, 'bin', 'FrameFlowCapture')
-  if (app.isPackaged && existsSync(packaged)) return packaged
-  return join(app.getAppPath(), 'resources', 'bin', 'FrameFlowCapture')
+  const candidates = app.isPackaged
+    ? [join(process.resourcesPath, 'bin', 'FrameFlowCapture')]
+    : [join(__dirname, '../../resources/bin/FrameFlowCapture'), join(app.getAppPath(), 'resources/bin/FrameFlowCapture')]
+  return candidates.find((p) => existsSync(p)) ?? candidates[0]!
 }
 
 function synthetic(): boolean {

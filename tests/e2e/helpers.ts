@@ -65,7 +65,7 @@ export async function exportVia(page: Page, app: ElectronApplication, dest: stri
   await page.getByTestId('open-export').click()
   await page.getByTestId('export-start').click()
   await page.getByTestId('export-done').waitFor({ timeout: 170_000 })
-  await page.getByRole('button', { name: 'Done' }).click()
+  await page.getByTestId('export-done').getByRole('button', { name: 'Done' }).click()
 }
 
 /** Waits for autosave, then returns the project JSON on disk. */
