@@ -171,7 +171,7 @@ describe('styles and cursor treatments', () => {
     expect(q.camera).toEqual(p.camera)
     expect(q.cursor).toEqual(p.cursor)
     expect(q.zooms).toEqual(p.zooms)
-    expect(q.frame.shadowTint).toBe('#8C7AC4')
+    expect(q.frame.shadowTint).toBe('#5E4E96')
   })
   test('manual look edits mark the style as custom; legacy styles stay named', () => {
     const p = createProject({ name: 'x', media, cursorTrack: null })

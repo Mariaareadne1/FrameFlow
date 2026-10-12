@@ -7,7 +7,7 @@ import type { OpenedProject } from '@shared/ipc'
 import { allowProject, allowRead, assertProject, canonical, isReadable, isVideoPath } from './access'
 import { libraryPath, safeName, timestampLabel } from './library'
 
-const MAX_RECENTS = 24
+const MAX_RECENTS = 200
 let tmpCounter = 0
 let recentsQueue: Promise<unknown> = Promise.resolve()
 

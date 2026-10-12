@@ -51,9 +51,9 @@ export interface RgbFrame {
 
 /** Decodes a single frame at `t` seconds as RGB24, optionally scaled. */
 export function frameAt(file: string, t: number, width?: number, height?: number): RgbFrame {
-  const info = probe(file)
-  const w = width ?? info.width
-  const h = height ?? info.height
+  const info = width === undefined || height === undefined ? probe(file) : null
+  const w = width ?? info!.width
+  const h = height ?? info!.height
   const data = execFileSync(FFMPEG, ['-v', 'error', '-ss', String(t), '-i', file, '-frames:v', '1', '-vf', `scale=${w}:${h}:flags=area`, '-f', 'rawvideo', '-pix_fmt', 'rgb24', '-'], {
     maxBuffer: 1024 * 1024 * 200,
   })

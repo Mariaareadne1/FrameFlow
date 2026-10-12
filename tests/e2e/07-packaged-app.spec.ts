@@ -13,7 +13,7 @@ test('packaged app starts, records via its bundled helper and exports', async ()
   const { app, page, dir } = await launch({ executablePath: EXE, synthetic: true })
   try {
     const info = await page.evaluate(() => window.frameflow.app.info())
-    expect(info.version).toBe('0.1.0')
+    expect(info.version).toBe('2.0.0')
     await page.getByTestId('record-demo').click()
     await page.getByTestId('start-recording').click()
     await expect(page.getByTestId('recording-status')).toContainText('Recording')

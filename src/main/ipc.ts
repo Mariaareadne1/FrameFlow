@@ -52,7 +52,7 @@ export function registerIpc(capture: CaptureController, getWindows: () => Browse
     })
   const ipc = { handle }
 
-  ipc.handle(IPC.appInfo, (): AppInfo => ({ version: app.getVersion(), platform: process.platform, isTest: isTestMode(), libraryPath: libraryPath() }))
+  ipc.handle(IPC.appInfo, (): AppInfo => ({ version: __FRAMEFLOW_VERSION__, platform: process.platform, isTest: isTestMode(), libraryPath: libraryPath() }))
   ipc.handle(IPC.reveal, (_e, p: unknown) => {
     const path = canonical(str(p, 'path'))
     if (!isReadable(path) && !exported.has(path) && path !== canonical(libraryPath())) throw new Error('Not allowed.')

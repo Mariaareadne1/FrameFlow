@@ -231,7 +231,7 @@ export const STYLE_PRESETS: readonly StylePreset[] = [
     name: 'Midnight',
     description: 'Cinematic dark, gentle glow',
     background: { kind: 'preset', presetId: 'midnight' },
-    frame: { padding: 0.07, radius: 14, shadow: 0.75, scale: 1, shadowTint: '#8C7AC4' },
+    frame: { padding: 0.07, radius: 14, shadow: 0.55, scale: 1, shadowTint: '#5E4E96' },
   },
 ]
 

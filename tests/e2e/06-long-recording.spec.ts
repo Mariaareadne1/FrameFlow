@@ -83,3 +83,44 @@ test('5-minute recording: opens quickly, edits stay responsive, export streams w
     await app.close()
   }
 })
+
+test('a gallery of 60 recent projects renders quickly and stays responsive', async () => {
+  const { mkdtempSync } = await import('node:fs')
+  const { tmpdir } = await import('node:os')
+  const dir = mkdtempSync(join(tmpdir(), 'frameflow-gallery-'))
+  const library = join(dir, 'library')
+  const userData = join(dir, 'userData')
+  mkdirSync(userData, { recursive: true })
+  // A real thumbnail (a frame of the fixture) shared by every card.
+  const thumb = `data:image/jpeg;base64,${execFileSync(join(process.cwd(), 'node_modules/ffmpeg-static/ffmpeg'), ['-v', 'error', '-ss', '3', '-i', join(FIXTURES, 'demo-1920x1200.mp4'), '-frames:v', '1', '-vf', 'scale=384:-2', '-f', 'image2pipe', '-vcodec', 'mjpeg', '-']).toString('base64')}`
+  const recents = []
+  for (let i = 0; i < 60; i++) {
+    const folder = join(library, `Project ${i}`)
+    mkdirSync(folder, { recursive: true })
+    const file = join(folder, `Project ${i}.frameflow`)
+    const p = createProject({ name: `Project ${String(i).padStart(2, '0')}`, media: { path: join(FIXTURES, 'demo-1920x1200.mp4'), width: 1920, height: 1200, duration: 30, hasAudio: false, cursorPath: null, cursorEmbedded: true }, cursorTrack: null, aspectRatio: i % 3 === 0 ? '9:16' : '16:9' })
+    writeFileSync(file, JSON.stringify(p))
+    recents.push({ path: file, name: p.name, updatedAt: p.updatedAt, duration: 30, thumbnail: thumb, aspectRatio: p.aspectRatio, mediaPath: p.media.path })
+  }
+  writeFileSync(join(userData, 'recent-projects.json'), JSON.stringify(recents))
+  const t0 = Date.now()
+  const { app, page } = await launch({ dir })
+  try {
+    await expect(page.getByTestId('project-card')).toHaveCount(60)
+    const ms = Date.now() - t0
+    const scrollMs = await page.evaluate(async () => {
+      const main = document.querySelector('main')!
+      const start = performance.now()
+      for (let y = 0; y < 4000; y += 200) {
+        main.scrollTop = y
+        await new Promise((r) => requestAnimationFrame(() => r(null)))
+      }
+      return (performance.now() - start) / 20
+    })
+    console.log('[perf] gallery', JSON.stringify({ launchToGalleryMs: ms, msPerScrollFrame: Number(scrollMs.toFixed(1)) }))
+    expect(ms).toBeLessThan(15_000)
+    expect(scrollMs).toBeLessThan(50)
+  } finally {
+    await app.close()
+  }
+})

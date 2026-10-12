@@ -307,7 +307,7 @@ function drawSpotlight(ctx: Ctx2D, scene: RenderScene, t: number, toCanvas: ToCa
     const outer = size * 7
     const g = ctx.createRadialGradient(px, py, inner, px, py, outer)
     g.addColorStop(0, 'rgba(12,12,22,0)')
-    g.addColorStop(1, `rgba(12,12,22,${0.3 * intensity * e})`)
+    g.addColorStop(1, `rgba(12,12,22,${0.24 * intensity * e})`)
     ctx.save()
     ctx.fillStyle = g
     ctx.fillRect(area.x, area.y, area.w, area.h)

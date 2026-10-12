@@ -1,5 +1,8 @@
 import { expect, test, type Page } from '@playwright/test'
 import { execFileSync } from 'node:child_process'
+import { readFileSync } from 'node:fs'
+import { cameraAt, effectiveZooms } from '../../src/shared/engine/camera'
+import { buildCameraPath, cameraSmoothTime, parseCursorTrack } from '../../src/shared/engine/cursor'
 import { join } from 'node:path'
 import { computeLayout, outputSize } from '../../src/shared/engine/layout'
 import type { Project } from '../../src/shared/project'
@@ -11,6 +14,10 @@ import { FFMPEG, decodeErrors, frameAt, frameDiff, meanLuma, pixel, probe, saveP
 async function prepareShortExport(page: Page): Promise<void> {
   await openPanel(page, 'timeline')
   for (const [a, b] of [[0, 8], [13, 30]] as const) {
+    // Put the playhead inside the range first so each Cut is a new one.
+    const ruler = page.getByTestId('timeline-ruler')
+    const rb = (await ruler.boundingBox())!
+    await ruler.click({ position: { x: ((a + 0.5) / 30) * rb.width, y: 5 } })
     await page.getByTestId('add-cut').click()
     await page.getByRole('textbox', { name: 'Start' }).fill(String(a))
     await page.getByRole('textbox', { name: 'Start' }).press('Enter')
@@ -98,26 +105,50 @@ test('camera feel and cursor treatments change the real exported frames', async 
   try {
     const project = await openDemoProject(page, app, library, { camera: 'still', cursorEffect: 'natural' })
     await prepareShortExport(page)
+    // Camera predicted by the shared engine from the saved project, at a source time.
+    const track = parseCursorTrack(JSON.parse(readFileSync(project.media.cursorPath!, 'utf8')))!
+    const cameraOf = (p: Project, t: number) => cameraAt(effectiveZooms(p.zooms), buildCameraPath(track.samples, 30, cameraSmoothTime(p.camera.followSmoothing), p.camera.deadzone), t)
     const exportFeel = async (feel: string) => {
       await openPanel(page, 'camera')
       await page.getByTestId(`feel-${feel}`).click()
       const out = join(dir, `feel-${feel}.mp4`)
       await exportVia(page, app, out)
       expect(decodeErrors(out)).toBe('')
-      return out
+      return { out, project: (await savedProject(page, library)).json as Project }
     }
     const still = await exportFeel('still')
     const calm = await exportFeel('calm')
     const follow = await exportFeel('follow')
     const focus = await exportFeel('focus')
-    // Output t = source - 8 (cut 0–8). Clicks at 9.15, 10.65, 12.15 → output 1.15, 2.65, 4.15.
-    const times = [1.6, 2.9, 4.4]
-    const d = (a: string, b: string) => times.reduce((s, t) => s + frameDiff(frameAt(a, t, 640, 360), frameAt(b, t, 640, 360)), 0) / times.length
-    expect(d(calm, still)).toBeGreaterThan(5)
-    expect(d(focus, still)).toBeGreaterThan(d(calm, still))
-    expect(d(follow, calm)).toBeGreaterThan(2)
-    expect(d(focus, calm)).toBeGreaterThan(2)
-    for (const [name, f] of [['still', still], ['calm', calm], ['follow', follow], ['focus', focus]] as const) savePng(f, 2.9, join(ARTIFACTS, `feel-${name}.png`), 640)
+    // Source 8–13 s survives the cuts, so output t = source − 8. Sample every 0.25 s.
+    const samples = Array.from({ length: 19 }, (_, i) => 8.25 + i * 0.25)
+    let maxCalm = 1
+    let maxFocus = 1
+    let followTravel = 0
+    let calmTravel = 0
+    let prevF = cameraOf(follow.project, 8)
+    let prevC = cameraOf(calm.project, 8)
+    for (const t of samples) {
+      const c = cameraOf(calm.project, t)
+      const fo = cameraOf(focus.project, t)
+      const fl = cameraOf(follow.project, t)
+      maxCalm = Math.max(maxCalm, c.scale)
+      maxFocus = Math.max(maxFocus, fo.scale)
+      followTravel += Math.hypot(fl.cx - prevF.cx, fl.cy - prevF.cy)
+      calmTravel += Math.hypot(c.cx - prevC.cx, c.cy - prevC.cy)
+      prevF = fl
+      prevC = c
+      // Exported pixels follow the engine: zoomed where it says so, identical to Still where not.
+      for (const [name, v, cam] of [['calm', calm, c], ['focus', focus, fo], ['follow', follow, fl]] as const) {
+        const diff = frameDiff(frameAt(v.out, t - 8, 320, 180), frameAt(still.out, t - 8, 320, 180))
+        if (cam.scale > 1.08) expect(diff, `${name} at ${t}s (scale ${cam.scale.toFixed(2)})`).toBeGreaterThan(2)
+        if (cam.scale < 1.001) expect(diff, `${name} at ${t}s should match Still`).toBeLessThan(1.2)
+      }
+    }
+    expect(maxCalm).toBeGreaterThan(1.3)
+    expect(maxFocus).toBeGreaterThan(maxCalm + 0.4)
+    expect(followTravel).toBeGreaterThan(calmTravel)
+    for (const [name, f] of [['still', still], ['calm', calm], ['follow', follow], ['focus', focus]] as const) savePng(f.out, 2.9, join(ARTIFACTS, `feel-${name}.png`), 640)
 
     // Cursor treatments, with the camera still so positions are fixed in the frame.
     await page.getByTestId('feel-still').click()
