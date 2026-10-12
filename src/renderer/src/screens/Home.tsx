@@ -68,13 +68,13 @@ export function Home() {
               className="group relative col-span-3 overflow-hidden rounded-2xl p-[1px] text-left transition-transform hover:-translate-y-0.5"
               style={{ background: 'linear-gradient(135deg, rgba(154,163,255,0.9), rgba(91,91,240,0.5) 45%, rgba(255,255,255,0.08))' }}
             >
-              <div className="relative h-full rounded-[15px] bg-[radial-gradient(120%_120%_at_0%_0%,#262a5c_0%,#14151c_55%)] p-6">
-                <span className="inline-flex items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-medium text-accent">
+              <div className="relative flex h-full min-h-[208px] flex-col rounded-[15px] bg-[radial-gradient(120%_120%_at_0%_0%,#262a5c_0%,#14151c_55%)] p-6">
+                <span className="inline-flex self-start items-center gap-1.5 rounded-full bg-accent-soft px-2.5 py-1 text-[11px] font-medium text-accent">
                   <Sparkles size={12} /> Recommended
                 </span>
                 <h2 className="mt-5 text-xl font-semibold">Quick Demo</h2>
                 <p className="mt-1.5 max-w-sm text-[14px] leading-relaxed text-[#c5c8d6]">Record your screen. Get a beautiful video automatically.</p>
-                <div className="mt-8 flex items-center gap-2 text-[13px] font-medium text-white">
+                <div className="mt-auto flex items-center gap-2 pt-8 text-[13px] font-medium text-white">
                   Start recording <ArrowRight size={15} className="transition-transform group-hover:translate-x-1" />
                 </div>
               </div>
@@ -83,14 +83,14 @@ export function Home() {
             <button
               data-testid="start-advanced"
               onClick={() => navigate({ name: 'record', intent: 'advanced' })}
-              className="group col-span-2 rounded-2xl bg-panel p-6 text-left ring-1 ring-line transition hover:-translate-y-0.5 hover:ring-line-strong"
+              className="group col-span-2 flex min-h-[210px] flex-col rounded-2xl bg-panel p-6 text-left ring-1 ring-line transition hover:-translate-y-0.5 hover:ring-line-strong"
             >
-              <span className="inline-flex h-8 w-8 items-center justify-center rounded-lg bg-white/5 text-muted">
-                <Clapperboard size={16} />
+              <span className="inline-flex h-[26px] w-[26px] self-start items-center justify-center rounded-lg bg-white/5 text-muted">
+                <Clapperboard size={14} />
               </span>
               <h2 className="mt-5 text-xl font-semibold">Advanced Editor</h2>
               <p className="mt-1.5 text-[14px] leading-relaxed text-muted">Create and customize your demo with full control.</p>
-              <div className="mt-8 flex items-center gap-2 text-[13px] font-medium text-fg">
+              <div className="mt-auto flex items-center gap-2 pt-8 text-[13px] font-medium text-fg">
                 Record <ArrowRight size={15} className="transition-transform group-hover:translate-x-1" />
               </div>
             </button>

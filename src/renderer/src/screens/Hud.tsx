@@ -7,12 +7,28 @@ import { formatTime } from '../lib/format'
 export function Hud() {
   const [state, setState] = useState<{ kind: 'countdown'; n: number } | { kind: 'recording'; s: number } | { kind: 'stopping' } | { kind: 'idle' }>({ kind: 'idle' })
   useEffect(() => {
-    return window.frameflow.capture.onEvent((e: CaptureEvent) => {
+    // Tick locally between the helper's once-per-second progress events.
+    let startedAt: number | null = null
+    const timer = setInterval(() => {
+      if (startedAt !== null) setState({ kind: 'recording', s: (performance.now() - startedAt) / 1000 })
+    }, 250)
+    const off = window.frameflow.capture.onEvent((e: CaptureEvent) => {
       if (e.type === 'countdown') setState({ kind: 'countdown', n: e.remaining })
-      else if (e.type === 'started') setState({ kind: 'recording', s: 0 })
-      else if (e.type === 'progress') setState({ kind: 'recording', s: e.seconds })
-      else if (e.type === 'stopping') setState({ kind: 'stopping' })
+      else if (e.type === 'started') {
+        startedAt = performance.now()
+        setState({ kind: 'recording', s: 0 })
+      } else if (e.type === 'progress') {
+        startedAt = performance.now() - e.seconds * 1000
+        setState({ kind: 'recording', s: e.seconds })
+      } else if (e.type === 'stopping') {
+        startedAt = null
+        setState({ kind: 'stopping' })
+      }
     })
+    return () => {
+      clearInterval(timer)
+      off()
+    }
   }, [])
 
   return (

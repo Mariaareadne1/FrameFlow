@@ -143,7 +143,7 @@ export function RecordSetup({ intent }: { intent: 'quick' | 'advanced' }) {
               ) : visible.length === 0 ? (
                 <div className="flex h-40 items-center justify-center text-muted">{tab === 'window' ? 'No windows available to record.' : 'No displays found.'}</div>
               ) : (
-                <div className="grid grid-cols-3 gap-3" role="listbox" aria-label="Capture sources">
+                <div className="grid grid-cols-3 gap-3 p-1" role="listbox" aria-label="Capture sources">
                   {visible.map((s) => {
                     const key = `${s.type}:${s.id}`
                     return (
