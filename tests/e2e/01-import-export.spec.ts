@@ -18,6 +18,24 @@ test('app starts, imports a video and exports a 1080p MP4', async () => {
     await page.waitForTimeout(800)
     await page.screenshot({ path: join(ARTIFACTS, 'editor-imported.png') })
 
+    // Playback advances the playhead and the preview; pausing stops it; seeking jumps.
+    const frameHash = () => page.evaluate(() => (document.querySelector('[data-testid="preview-canvas"]') as HTMLCanvasElement).toDataURL('image/jpeg', 0.5).length)
+    const before = await frameHash()
+    await page.getByTestId('timeline-play').click()
+    await page.waitForTimeout(1500)
+    await page.getByTestId('timeline-play').click()
+    const playedTo = await page.getByTestId('timecode').innerText()
+    const seconds = Number(/0:(\d+\.\d)/.exec(playedTo)![1])
+    expect(seconds).toBeGreaterThan(0.8)
+    expect(seconds).toBeLessThan(3)
+    expect(await frameHash()).not.toBe(before)
+    await page.waitForTimeout(500)
+    expect(await page.getByTestId('timecode').innerText()).toBe(playedTo)
+    const ruler = page.getByTestId('timeline-ruler')
+    const box = (await ruler.boundingBox())!
+    await ruler.click({ position: { x: box.width / 2, y: box.height / 2 } })
+    await expect(page.getByTestId('timecode')).toContainText(/^0:1[45]\.\d/)
+
     const { json } = await savedProject(page, library)
     expect(json.media.path).toBe(src)
     expect(json.media.cursorEmbedded).toBe(true)
