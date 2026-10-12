@@ -1,36 +1,50 @@
 # FrameFlow — Progress Log
 
-_Last updated: 2026-10-12_
+_Last updated: 2026-10-12 (FrameFlow 2.0 — Editorial Studio)_
 
-## Current state
-v0.1 is feature-complete for the MVP and verified end to end on macOS 26 (Apple silicon).
-The full verification record is in `docs/verification.md`.
+## Branch and state
+- Working branch: `feat/editorial-studio`, which merges into `main` after the full regression
+  passes.
+- The baseline record is `docs/redesign-baseline.md`. Everything was green before the
+  redesign.
+- Verification results are in `docs/verification.md`.
 
-## Completed milestones
-- [x] Reference research (OpenScreen and its fork), written up in `docs/architecture.md`
-- [x] Pure engine: timeline/trim mapping, cursor smoothing, camera with zoom chaining,
-      auto zoom, layout (unit tested)
-- [x] Native ScreenCaptureKit helper: hidden cursor, 60 Hz cursor and click telemetry,
-      H.264 MP4, crash-safe fragments, synthetic test source
-- [x] Electron main process: sandboxing, validated IPC, sender checks, path trust boundary,
-      ranged media protocol
-- [x] UI: Home, Record, Processing, Quick Demo, Advanced Editor (timeline and inspector), HUD,
-      Export, Settings
-- [x] Shared preview/export renderer; WebCodecs export streamed to disk, with audio
-- [x] Projects: autosave, Recents, Open, validation, relinking missing media
-- [x] Unit tests (53) and end-to-end tests (14), including real capture, a 5-minute
-      performance run and the packaged app
-- [x] Packaging (`.app` and DMG, ad-hoc signed, Electron fuses)
-- [x] Security review and code review findings fixed
-- [x] Docs: README, architecture, testing, roadmap, verification, third-party notices
+## Completed (2.0)
+- [x] Baseline: tests, before screenshots, real v1 project fixtures, and golden frames from 0.1.
+- [x] Project format v2 with a v1 migration that preserves output exactly (proven
+      pixel-identical) and a `.v1.bak` on first save.
+- [x] Engine:
+  - Camera Feel (Still, Calm, Follow, Focus) with tuning
+  - a dead-zone camera path
+  - crisp easing
+  - minimum pan hand-off
+  - Moment labels and disable
+  - id-safe regeneration
+- [x] Renderer:
+  - signature backdrops with soft fades, vignette and seeded grain
+  - tinted shadows
+  - Natural, Halo, Spotlight and Pulse cursor treatments
+  - path memoization
+- [x] UI:
+  - an editorial design system with bundled OFL fonts
+  - a new mark
+  - the gallery Home (rename, reveal, remove, missing badge)
+  - record setup and HUD
+  - the Studio (dock, transport, Moments, Design/Camera/Cursor drawers, Timeline)
+  - the export sheet and the settings sheet
+- [x] Tests:
+  - unit tests (82)
+  - end-to-end tests for Moments, the five styles, the four feels, the four cursor
+    treatments, preview/export parity, legacy golden frames, a 60-project gallery, and the
+    packaged app
+- [x] Docs: README, redesign, comparison, architecture, testing, roadmap and verification.
 
-## Open items
-- [ ] Verify microphone narration manually. The code path exists, but granting the
-      permission needs a person.
-- [ ] Developer ID signing and notarization for distribution.
-- [ ] Secondary features listed in `docs/roadmap.md`: system audio, webcam, annotations, GIF.
+## Known issues and limits
+- Microphone narration is not verified (it needs an OS prompt).
+- Performance numbers in the final run were taken while an unrelated process used ~270% CPU
+  (load average 30–145). Correctness tests are unaffected. Speed figures are conservative.
+- macOS on Apple silicon only. Builds are not notarized.
 
-## Next actions for a new session
-1. `npm install`, then `npm run fixtures`, then `npm test`, then `npm run test:e2e` to confirm
-   a green baseline.
-2. Pick the next item from `docs/roadmap.md` › Next.
+## Next steps
+1. Verify microphone recording by hand.
+2. Pick from `docs/roadmap.md` › Next: system audio, webcam, annotations, GIF.

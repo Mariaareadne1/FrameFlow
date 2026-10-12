@@ -1,5 +1,8 @@
 # FrameFlow Architecture
 
+> Updated for **FrameFlow 2.0**. The 2.0 product redesign is described in
+> [redesign.md](redesign.md); this document covers the system it is built on.
+
 FrameFlow is a macOS desktop app that turns a raw screen recording into a polished demo:
 it hides the real cursor while recording, records cursor/click telemetry, generates
 automatic zooms, and renders everything over a styled backdrop to an H.264 MP4.
@@ -18,33 +21,40 @@ automatic zooms, and renders everything over a styled backdrop to an H.264 MP4.
       stdin/stdout JSON lines                           contextBridge (preload)
 ┌───────────────┴──────────────┐          ┌─────────────────────┴──────────────┐
 │ FrameFlowCapture (Swift)     │          │ Renderer (React, sandboxed)         │
-│ ScreenCaptureKit stream      │          │ screens: Home, Record, Quick Demo,  │
-│  showsCursor = false         │          │          Advanced Editor, HUD       │
-│ AVAssetWriter → H.264 MP4    │          │ state: editorStore (undo/redo),     │
-│ 60 Hz cursor + click sampler │          │        playhead, appStore           │
+│ ScreenCaptureKit stream      │          │ screens: Home (gallery), Record,    │
+│  showsCursor = false         │          │   Studio (Moments·Design·Camera·    │
+│ AVAssetWriter → H.264 MP4    │          │   Cursor·Timeline), HUD             │
+│ 60 Hz cursor + click sampler │          │ state: editorStore (undo/redo),     │
+│                              │          │   playhead, studioStore, appStore   │
 │ → recording.mp4, cursor.json │          │ engine/render.ts  ← shared by       │
 └──────────────────────────────┘          │   Preview (rAF)  and  exporter.ts   │
                                           │ media/: mediabunny demux/decode,    │
                                           │   WebCodecs H.264 encode, MP4 mux   │
                                           └─────────────────────────────────────┘
                   src/shared/  — pure TypeScript used by everything (and unit tests)
-                  project.ts · projectModel.ts · styles.ts · ipc.ts
+                  project.ts · projectModel.ts (+ v1→v2 migration) · styles.ts · moments.ts · ipc.ts
                   engine/ timeline · cursor · camera · autoZoom · layout
 ```
 
-## One project model, two experiences
+## One project model, one Studio
 
-`src/shared/project.ts` defines the single `Project` representation. **Quick Demo and the
-Advanced Editor are two views over the same object in the same store** (`editorStore`).
-Nothing is converted when switching; `project.mode` only remembers which view was last used.
+`src/shared/project.ts` defines the single `Project` representation (format v2). The
+**Studio** is one screen whose sections — Moments, Design, Camera, Cursor and Timeline — are
+all views over the same object in the same store (`editorStore`). The preview stays mounted
+across sections; `project.mode` only remembers whether the Timeline was last open.
 
-- Automatic zoom produces ordinary `ZoomEvent`s with `origin: 'auto'`. They appear on the
-  Advanced Editor timeline and can be moved, resized, retimed or deleted.
-- Editing an automatic zoom promotes it to `origin: 'manual'`, so changing the auto-zoom level
-  later regenerates only untouched automatic zooms and never discards user work.
-- Style presets (Clean / Minimal / Colorful) are plain mappings to `background`, `frame` and
-  `cursor` render parameters (`src/shared/styles.ts`).
-- Both views share one export pipeline.
+- **Moments are `ZoomEvent`s.** `src/shared/moments.ts` derives the card view (numbering,
+  honest "Click at / Focus at" subtitles, output times after cuts, status) from
+  `project.zooms`, recorded clicks and trims — nothing is stored twice. Optional
+  `ZoomEvent.label` and `ZoomEvent.disabled` hold user names and "camera off".
+- Automatic zoom produces ordinary `ZoomEvent`s with `origin: 'auto'`. Editing one (from a
+  Moment card or the Timeline) promotes it to `origin: 'manual'`, so changing the camera feel
+  regenerates only untouched automatic Moments. Regeneration never mints duplicate ids and
+  drops autos that a manual Moment overlaps (they would be suppressed when rendering anyway).
+- Styles (Studio, Editorial, Aura, Canvas, Midnight) map to `background` + `frame` only;
+  camera (`project.camera`) and cursor (`project.cursor`) are independent settings.
+- Every UI path, from the Moments strip to the Timeline, goes through the same `projectModel`
+  operations and one export pipeline.
 
 ### Conventions
 - **Time** stored in a project (zooms, trims, cursor samples) is *source* seconds. Trims are
@@ -85,11 +95,15 @@ without Screen Recording permission. Real capture is covered separately (see tes
 `src/renderer/src/engine/render.ts → renderFrame(ctx, size, scene, source, t)` draws one
 output frame with Canvas 2D:
 
-1. cached backdrop (background layers + soft drop shadow + contact shadow),
+1. cached backdrop: background layers (linear, radial, vignette and deterministic seeded
+   grain — `mulberry32`, scaled to the output's short side so it reads the same at any size)
+   plus a soft drop shadow and contact shadow, tinted by `frame.shadowTint`,
 2. rounded-rect clip,
 3. `drawImage` of the camera **viewport** of the source (zoom = cropping the source, so zooms
    are rendered from full-resolution pixels, never upscaled from the output),
-4. click ripples and the vector cursor, positioned via the same viewport projection,
+4. the cursor treatment (Natural; Halo disc; Spotlight radial quieting after clicks; Pulse
+   ripple — identical to 0.1's ripple at full intensity) and the vector cursor, all positioned
+   via the same viewport projection,
 5. a hairline edge.
 
 All sizes are proportional to the output's short side (`engine/layout.ts`), so a 960×540
@@ -106,14 +120,19 @@ scrubbing, preview and export always agree.
 
 ### Camera and zoom (`engine/camera.ts`)
 - Per zoom: weight ramps 0→1 over `transition` (≤ half the event) with the chosen easing
-  (`smooth` cubic in-out, `snappy` exponential out, `linear`), holds, and ramps out.
+  (`smooth` cubic in-out, `crisp` cubic-bezier(.32,0,.12,1) — quick arrival with zero start
+  velocity, `linear`; `snappy`, the 0.1 exponential ease-out, is kept for old projects).
 - Zooms within 0.8 s of each other form a **chain**: one envelope ramps in at the first and
   out at the last, and the camera eases scale and focus from one member to the next — a pan
-  instead of an out-and-back-in bounce.
+  instead of an out-and-back-in bounce. Hand-offs last at least 0.7 s so distant pans never
+  whip across the frame.
 - `scale = 1 + (S − 1)·w`, `centre = 0.5 + (focus − 0.5)·w`, then the centre is clamped to
   `[0.5/scale, 1 − 0.5/scale]` so the viewport never leaves the frame.
 - Manual zooms win: an automatic zoom overlapping a manual one is ignored.
-- Focus is either a fixed point or the camera path (follow cursor).
+- Focus is either a fixed point or the camera path (follow cursor). The camera path is built
+  with a **dead zone** (`buildCameraPath`): the target only moves once the cursor strays more
+  than `camera.deadzone` from it, so small hand movements never move the camera; its smoothing
+  time comes from `camera.followSmoothing`. Dead zone 0 reproduces 0.1 exactly.
 
 ### Automatic zoom (`engine/autoZoom.ts`)
 1. Interest points: left clicks (weight 1) and dwells — the cursor coming to rest (within
@@ -125,12 +144,17 @@ scrubbing, preview and export always agree.
    and chained (pans), or the weaker is dropped if the split would be under 1.6 s.
 5. At most 5 (Subtle) / 9 (Dynamic) zoom starts in any 60 s window, keeping the strongest.
 
-| | Subtle | Dynamic |
-|---|---|---|
-| Scale | 1.5× | 2.0× |
-| Focus | fixed cluster centre | follows cursor |
-| Lead-in / hold | 0.7 s / 1.6 s | 0.5 s / 1.25 s |
-| Transition | 0.9 s | 0.7 s |
+| | Calm (= 0.1 Subtle) | Follow | Focus |
+|---|---|---|---|
+| Scale | 1.5× | 1.8× | 2.2× |
+| Focus | fixed cluster centre | follows cursor (dead-zoned) | fixed cluster centre |
+| Interest points | clicks (dwells only without clicks) | clicks + dwells | clicks (dwells only without clicks) |
+| Lead-in / hold | 0.7 s / 1.6 s | 0.6 s / 1.5 s | 0.4 s / 1.2 s |
+| Transition / easing | 0.9 s smooth | 0.8 s smooth | 0.7 s crisp |
+| Max per minute | 5 | 7 | 8 |
+
+**Still** generates nothing. Camera tuning scales these: intensity multiplies magnification,
+speed divides transition length, softness picks smooth vs crisp easing.
 
 Imported videos have no telemetry: automatic zoom is unavailable, manual zooms use a fixed
 focus point, and the synthetic cursor is disabled (the real cursor is in the pixels).
@@ -152,7 +176,12 @@ focus point, and the synthetic cursor is disabled (the real cursor is in the pix
 
 ## Projects
 
-A project is a pretty-printed JSON `.frameflow` file. Recordings live in
+A project is a pretty-printed JSON `.frameflow` file (format **v2**). v1 files (0.1) are
+migrated in memory by `parseProject` — `autoZoom` → `camera.feel` (off→still, subtle→calm,
+dynamic→follow) with legacy tuning (dead zone 0, 0.45 s follow), `clickEffect` →
+`cursor.effect` (pulse/natural) — without regenerating zooms or touching any stored value, so
+legacy exports are pixel-identical to 0.1 (verified against golden frames). The first save
+over a v1 file keeps a `<file>.v1.bak`. Newer formats are refused with a clear message. Recordings live in
 `~/Movies/FrameFlow/Recording <date>/` together with `recording.mp4`, `cursor.json` and the
 project file; imports get their own folder that references the original video. Saves are
 atomic (write temp + rename), happen ~0.7 s after each edit, and are validated with

@@ -33,7 +33,9 @@ dmg:
   title: FrameFlow
 electronFuses:
   runAsNode: false
-  enableCookieEncryption: true
+  # Cookie encryption stays off: FrameFlow uses no cookies, and the fuse makes Electron read a
+  # Keychain item at launch, which prompts (and blocks) after every re-signed build.
+  enableCookieEncryption: false
   enableNodeOptionsEnvironmentVariable: false
   # Kept enabled so the packaged app can be driven by the automated smoke test (Playwright
   # attaches via --inspect). Set to false for public distribution builds.

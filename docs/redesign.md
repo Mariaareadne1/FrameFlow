@@ -119,6 +119,10 @@ layers, frame padding, radius and shadow strength, plus the new shadow tint):
 | **Canvas** | Warm paper with deterministic grain | Editorial padding, 10 px, matte contact shadow |
 | **Midnight** | Charcoal / blue-black with a subtle lavender glow | Tight padding, 14 px, glow-tinted shadow |
 
+Signature backdrops fade their radial blooms to the same colour at zero alpha (`soft`
+layers). Fading to transparent black, as 0.1 did, greys out light colours. The classic 0.1
+gradients keep the old fade, so legacy projects render identically.
+
 Grain comes from a seeded PRNG tile scaled to the output's short side, and is cached in the
 backdrop. The same seed and resolution always give identical pixels, with no flicker. The
 eight 0.1 gradients and the solid colours remain available as palette options, and legacy
@@ -136,7 +140,7 @@ untouched.
 | **Still** | No automatic camera. Manual Moments still play. |
 | **Calm** | 1.5×, fixed framing per interaction cluster, slow 0.9 s smooth transitions, long holds, at most 5 per minute. This is exactly 0.1's "Subtle". |
 | **Follow** | 1.8×, the camera follows a lazily smoothed cursor with a **dead zone** so tiny movements don't move it, longer chain gap, so neighbouring interactions become pans. |
-| **Focus** | 2.2×, centred on click clusters (clicks only), snappy 0.55 s transitions, shorter lead-in and hold. |
+| **Focus** | 2.2×, centred on click clusters (clicks only), crisp 0.7 s transitions, shorter lead-in and hold. |
 
 The advanced controls are:
 
@@ -148,6 +152,14 @@ The advanced controls are:
 
 Changing the feel regenerates only untouched automatic Moments. Manual and edited Moments
 always survive.
+
+Calibration found two bugs:
+
+- **Velocity jump.** 0.1's `snappy` easing starts at full velocity, which made a Focus zoom
+  jump 0.23× in a single frame. Focus therefore uses a new **crisp** cubic-bezier easing that
+  starts at rest. The old `snappy` easing is kept for existing projects.
+- **Fast pans.** Corner zooms that ramped out quickly whipped the view across the frame.
+  Chained pans now take at least 0.7 s, and Focus transitions take 0.7 s.
 
 ## Cursor treatments
 
@@ -181,6 +193,17 @@ v1 → v2 runs in `parseProject`:
 
 When a v1 file is first saved, main writes `<file>.v1.bak` before the atomic replace. Files
 from a newer version are refused with a clear message.
+
+## Visual QA findings that changed the design
+
+- The first Editorial render was a muddy taupe. The cause was the transparent-black radial
+  fade described above.
+- Midnight's glow read as a white halo. Its strength and tint were reduced to a deep
+  lavender.
+- Canvas was too close to Editorial at thumbnail size. It moved to a warmer kraft paper with
+  more visible grain.
+- The focus picker could render blank because the seek was still in flight. It now repaints
+  on `seeked`.
 
 ## Architecture decisions
 

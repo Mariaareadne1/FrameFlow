@@ -101,7 +101,9 @@ test('discarding a recording deletes it and returns to setup', async () => {
     await page.getByTestId('start-recording').click()
     await expect(page.getByTestId('recording-status')).toContainText('Recording')
     await page.waitForTimeout(1500)
-    await page.getByRole('button', { name: 'Discard' }).click()
+    await page.getByRole('button', { name: 'Discard', exact: true }).click()
+    await expect(page.getByRole('dialog', { name: 'Discard this take?' })).toBeVisible()
+    await page.getByTestId('confirm-action').click()
     await expect(page.getByTestId('start-recording')).toBeVisible()
     await page.waitForTimeout(500)
     const left = existsSync(library) ? readdirSync(library) : []

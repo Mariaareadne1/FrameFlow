@@ -5,6 +5,7 @@ import type { CaptureEvent, CaptureSource, PermissionState } from '@shared/ipc'
 import { useApp } from '../state/appStore'
 import { errorMessage, formatTime } from '../lib/format'
 import { Button, Segmented, Spinner } from '../components/ui'
+import { ConfirmDialog } from '../components/Modal'
 
 type Phase = { name: 'idle' } | { name: 'countdown'; remaining: number } | { name: 'recording'; seconds: number } | { name: 'stopping' }
 
@@ -19,6 +20,7 @@ export function RecordSetup() {
   const [tab, setTab] = useState<'display' | 'window'>('display')
   const [phase, setPhase] = useState<Phase>({ name: 'idle' })
   const [starting, setStarting] = useState(false)
+  const [confirmDiscard, setConfirmDiscard] = useState(false)
 
   const refresh = useCallback(async () => {
     const p = await window.frameflow.capture.permission()
@@ -104,13 +106,25 @@ export function RecordSetup() {
                 <Square size={13} fill="currentColor" /> {phase.name === 'countdown' ? 'Cancel' : 'Stop recording'}
               </Button>
               {phase.name === 'recording' && (
-                <Button variant="ghost" size="lg" onClick={() => void window.frameflow.capture.cancel()}>
+                <Button variant="ghost" size="lg" onClick={() => setConfirmDiscard(true)}>
                   Discard
                 </Button>
               )}
             </div>
           )}
           <p className="text-[12px] text-ink-3">Stop any time with ⌘⇧2 or the floating control.</p>
+          <ConfirmDialog
+            open={confirmDiscard && phase.name === 'recording'}
+            title="Discard this take?"
+            body="The recording so far will be deleted. This can't be undone."
+            confirmLabel="Discard recording"
+            danger
+            onCancel={() => setConfirmDiscard(false)}
+            onConfirm={() => {
+              setConfirmDiscard(false)
+              void window.frameflow.capture.cancel()
+            }}
+          />
         </div>
       ) : needsPermission ? (
         <div className="flex flex-1 items-center justify-center p-8">

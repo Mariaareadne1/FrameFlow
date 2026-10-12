@@ -1,126 +1,165 @@
-# Verification Record
+# Verification Record — FrameFlow 2.0
 
-Final run: **2026-10-12**, MacBook Pro (Apple silicon, arm64), macOS 26.4.1 (25E253),
-Node 22.21.0, Electron 40.10.6, Xcode Swift 6.3.3. The raw log is in
-`tests/.artifacts/final-run.log` (git-ignored, regenerated on every run).
+The final runs were on **2026-10-12**: a MacBook Pro (Apple silicon), macOS 26.4.1, Node
+22.21.0, Electron 40.10.6, branch `feat/editorial-studio`. The pre-redesign baseline (all
+green) is recorded in [redesign-baseline.md](redesign-baseline.md). The 0.1 record is
+preserved at the end of this file.
 
-## Commands executed
+> **Environment note.** During the final runs an unrelated process on the machine
+> (`chrome-headless-shell`, not part of FrameFlow or its tests) kept 2–4 cores busy. Load
+> averages were 25–145. Correctness is unaffected. Timing figures below are therefore
+> pessimistic, and two long tests hit their old 3-minute budgets (see "Failures and fixes").
 
-```bash
-npx eslint .
-npm run typecheck
-npx vitest run
-npm run dist
-FRAMEFLOW_REAL_CAPTURE=1 npx playwright test
-```
+## Commands and results
 
-`npm run dist` builds the native helper, the bundles, `FrameFlow.app` and the DMG.
-The Playwright run builds the bundles first and includes the opt-in real-capture test.
-
-## Results
-
-| Check | Result |
-|---|---|
-| ESLint | ✅ 0 problems |
-| TypeScript (main/preload/shared, renderer, tests; `strict`, `noUncheckedIndexedAccess`) | ✅ 0 errors |
-| Unit tests | ✅ 53 / 53 in 6 files |
-| Production build + packaging | ✅ `release/mac-arm64/FrameFlow.app` (262 MB, ad-hoc signed, fuses applied) and `release/FrameFlow-0.1.0-arm64.dmg` |
-| End-to-end tests | ✅ 14 / 14 passed; 1 skipped (`08-screenshots`, a docs generator run separately) |
-
-### End-to-end tests
-
-| # | Test | What it proves |
+| Check | Command | Result |
 |---|---|---|
-| 01 | Import → play/pause/seek → export 1080p | App starts and Home renders. Import works. Play advances the playhead and preview, Pause holds, ruler seeks. Exported H.264 1920×1080 @60, exactly 1800 frames, 30.00 s, decodes cleanly, no black frames |
-| 02 | Quick Demo full flow | Real UI recording (synthetic source), automatic zooms, export from Quick Demo, zooms visible in pixels (versus an auto-zoom-off export), style and format settings change the export, Advanced Editor shows the same auto zooms, editing one changes the export, undo/redo, quit and relaunch, reopen from Recents keeps the edit |
-| 03a | Editing and sync | Background and padding update preview pixels. Cut 5–10 s: export is 25.00 s / 1500 frames, and the burned-in time code on both sides of the cut matches the expected source times (±0.15 s). Custom background and framing land where the shared layout says. Manual zooms on a video without cursor data: add, drag to move, delete with the keyboard, undo/redo. Square export with zooms |
-| 03b | Edge cases | 1.5 s clip with a zoom covering it (90 frames). Portrait source in a landscape frame. AAC audio carried through a trim |
-| 04 | Robustness | Permission-denied guidance, and the main process refuses to start. Missing media is relinked. Cancelled export leaves no file and no `.partial`. Unwritable destination gives a clear error. Discard deletes the recording. Quitting mid-recording leaves a playable MP4 plus cursor data. A crafted project cannot read `/etc/hosts` or a neighbouring JSON |
-| 05 | **Real capture** | ScreenCaptureKit window capture of a local demo page while the real pointer moved. Recording is H.264 at Retina size, content changed during capture, telemetry was dense and normalized, ≥1 auto zoom from **real** cursor data, export decodes |
-| 06 | 5-minute recording | Opens in 126 ms. Style edit with redraw takes 9.1 ms. Export takes 91.8 s (**3.27× realtime**) with peak main+renderer RSS of **366 MB**. 18 000 frames plus AAC, 300.07 s |
-| 07 | Packaged app | The `.app` starts, records through its bundled helper, exports a valid 1080p MP4, and has no DevTools menu |
+| Lint | `npx eslint .` | ✅ 0 problems |
+| Types | `npm run typecheck` (main/preload/shared, renderer, tests) | ✅ 0 errors |
+| Unit | `npx vitest run` | ✅ **82 / 82** (8 files) |
+| Package | `npm run dist` | ✅ `FrameFlow.app` (263 MB) and `FrameFlow-2.0.0-arm64.dmg` (113 MB), ad-hoc signed, fuses applied |
+| E2E, full suite | `FRAMEFLOW_REAL_CAPTURE=1 npx playwright test` | 21 passed, 1 failed (02, timeout only), 1 skipped (08 screenshot generator) |
+| E2E, reruns after fixes | `npx playwright test 02 04` and then `07` on the repackaged app | ✅ 02 passed, 04 passed (7/7), 07 passed |
 
-### Exported files inspected with ffprobe
+**Net result: all 22 functional end-to-end tests pass on the final code.** The only skipped
+test is the docs screenshot generator. It also ran successfully, separately.
 
-| File | Video | Frames | Duration | Audio |
-|---|---|---|---|---|
-| landscape.mp4 (16:9) | h264 1920×1080 @60 | 1800 | 30.000 s | — |
-| quick.mp4 (Quick Demo, auto zoom) | h264 1920×1080 @60 | 546 | 9.100 s | — |
-| quick-nozoom.mp4 | h264 1920×1080 @60 | 546 | 9.100 s | — |
-| quick-portrait.mp4 (9:16, Colorful) | h264 1080×1920 @60 | 546 | 9.100 s | — |
-| edited.mp4 (auto zoom edited to 3.5×) | h264 1920×1080 @60 | 546 | 9.100 s | — |
-| trimmed.mp4 (cut 5–10 s, custom background) | h264 1920×1080 @60 | 1500 | 25.000 s | — |
-| square-zooms.mp4 (1:1, multiple zooms) | h264 1080×1080 @60 | 1500 | 25.000 s | — |
-| short.mp4 | h264 1920×1080 @60 | 90 | 1.500 s | — |
-| portrait-src.mp4 | h264 1920×1080 @60 | 360 | 6.000 s | — |
-| audio.mp4 (cut 2–4 s) | h264 1920×1080 @60 | 360 | 6.080 s* | aac |
-| long.mp4 | h264 1920×1080 @60 | 18000 | 300.075 s* | aac |
-| real-capture.mp4 | h264 1920×1080 @60 | 478 | 7.967 s | — |
-| packaged.mp4 | h264 1920×1080 @60 | 244 / 271 | 4.07 / 4.52 s | — |
+## End-to-end tests
 
-\* The container duration includes AAC encoder padding (about 80 ms); the video track is
-exact.
+- **01 import-export**
+  - Launch, then import.
+  - Play advances the timecode and preview, pause holds, and seeking works.
+  - 1080p60 export: 1800 frames, 30.000 s, clean decode, no black frames.
+- **02 quick-demo**
+  - A synthetic recording opens straight into the Studio with the defaults (Editorial, Calm,
+    Halo). Its automatic Moments show as cards.
+  - It exports without opening the Timeline.
+  - The Calm export differs from the Still export where zoomed, and is identical before any
+    zoom.
+  - An Aura 9:16 export is 1080×1920 with a lavender backdrop.
+  - The Timeline shows the same Moments. A Moment is edited there and becomes manual.
+  - Undo and redo work. After quit, relaunch and reopen from the gallery, the edit is intact.
+- **03 editing**
+  - Background and padding changes update the preview pixels.
+  - A 5–10 s cut is verified by burned-in time code on both sides of the cut. It exports at
+    25.000 s / 1500 frames.
+  - Manual Moments on a video without telemetry can be added, dragged, deleted, undone and
+    redone. A square export works.
+  - A 1.5 s clip, a portrait source, and AAC audio through a cut all work.
+- **04 robustness**
+  - Permission denied shows guidance, and the main process refuses to record.
+  - Missing media can be relinked.
+  - Export cancel and an unwritable export destination both behave correctly.
+  - Discard (now with confirmation) works.
+  - Quitting mid-recording still leaves a playable MP4.
+  - A crafted project file cannot read `/etc/hosts`.
+- **05 real capture** ✅
+  - A real ScreenCaptureKit window capture of a local demo page, with real cursor telemetry
+    and automatic Moments.
+  - The export decodes.
+  - This retests native capture on the 2.0 build.
+- **06 performance**
+  - 5-minute recording:
+    - opens in 461 ms
+    - style change with redraw (main preview plus five live style cards): 13.1 ms
+    - export: 18,000 frames with AAC in 117 s, **2.57× realtime under load** (baseline 3.27×
+      on a quieter machine)
+    - peak main+renderer RSS: **329 MB** (baseline 346 MB)
+  - A **60-project gallery** appears 2.3 s after launch, and scrolling takes 8.2 ms per frame.
+- **07 packaged app**
+  - The `.app` records through its bundled helper and exports 1080p.
+  - It has no DevTools menu.
+  - The reported version is 2.0.0.
+- **09 Moments**
+  - Each card's thumbnail is decoded and its burned-in time code matches that Moment's time.
+  - Selecting a card seeks to it to within 0.15 s.
+  - Renaming a Moment and changing its zoom update the real `ZoomEvent`, which becomes manual.
+  - Switching to Focus and back keeps the edit.
+  - Disable, delete, undo, redo and add all work.
+  - A cut before a Moment keeps its source time. A Moment inside a cut shows "Removed by a cut".
+  - Dragging in the Timeline moves the same event the card shows.
+  - The export is shorter by exactly the cuts.
+- **10 creative**
+  - All **five styles** were exported at 720p30: 150 frames each, clean decodes.
+    - Midnight is dark.
+    - Editorial is light and warm.
+    - Studio is neutral.
+    - Aura is lavender.
+    - Canvas is warmer than Editorial, with measurable grain that is stable between frames.
+  - Custom padding marks the style as custom and survives 9:16 and 1:1 exports.
+  - **Camera feels**: Still, Calm, Follow and Focus were exported. At 19 instants each, the
+    frames differ from Still exactly where the shared engine predicts a zoom, and match Still
+    where it predicts none.
+    - Focus's peak scale is more than 0.4 above Calm's.
+    - Follow travels further than Calm.
+  - **Cursor treatments**: Natural, Halo, Spotlight and Pulse were exported.
+    - Halo and Pulse change the area near the click.
+    - Spotlight dims the far area right after a click, and does nothing away from clicks.
+    - Pulse has faded by 1.1 s after the click.
+  - **Preview/export parity**: the preview canvas was compared with the exported frame at
+    three instants (mid-zoom, mid-transition, no zoom). Mean absolute differences were
+    **2.35, 2.18 and 4.66 out of 255**, which is encoding noise.
+- **11 legacy projects**: three real 0.1 project files (recording, dynamic, import).
+  - Each opens without the file being rewritten.
+  - Each export was compared with frames **exported by FrameFlow 0.1**. The mean difference
+    was **0.00 at all 18 compared instants**, so the output is pixel-identical.
+  - An edit saves the project as v2 and writes a `.v1.bak` that is byte-identical to the
+    original.
+  - Each reopens intact.
 
-The following are included in `docs/media/`:
+## Exported sample videos (inspected with ffprobe and a full decode)
 
-- `sample-quick-demo-synthetic.mp4`: a Quick Demo export of a synthetic recording.
-- `sample-real-capture-demo-page.mp4`: a real ScreenCaptureKit window capture of the local
-  demo page, exported through Quick Demo with Dynamic zoom.
-- Product screenshots generated from the running app.
-
-## Feature checklist
-
-| Requirement | Status | Evidence |
+| Sample | Settings | Result |
 |---|---|---|
-| App builds | ✅ Verified | `npm run dist` |
-| App starts | ✅ Verified | e2e 01, 07 (packaged) |
-| Main UI usable | ✅ Verified | e2e 01–04 drive every screen through the UI; screenshots reviewed |
-| Screen recording creates a real file | ✅ Verified | e2e 05: real ScreenCaptureKit window capture. A real full-display capture was also run once manually during development (3456×2234, 3.15 s) and deleted for privacy |
-| Recording opens in the editor | ✅ Verified | e2e 02, 05, 07 |
-| Import video | ✅ Verified | e2e 01, 03, 04 |
-| Playback and seeking | ✅ Verified | e2e 01: Play for 1.5 s advances the time code (0.8–3 s) and changes preview pixels, Pause holds it, and a ruler click seeks to the middle. e2e 03 uses seeks to place cuts and zooms |
-| Trimming | ✅ Verified | e2e 03: time code checked across the cut |
-| Automatic zoom from recorded cursor data | ✅ Verified | e2e 02 (synthetic telemetry), e2e 05 (real telemetry), unit tests |
-| Manual zoom adjustments | ✅ Verified | e2e 02 (edit auto zoom), e2e 03 (add, move, delete, undo) |
-| Background and framing | ✅ Verified | e2e 02, 03 (pixel checks in preview and export) |
-| Preview reflects edits | ✅ Verified | e2e 03 preview pixel checks. Preview and export share `renderFrame` |
-| MP4 export is playable and correct | ✅ Verified | ffprobe and full decode of every export above |
-| Save and reopen projects | ✅ Verified | e2e 02 (after app restart), 04 (relink) |
-| Quick Demo usable video without the Advanced Editor | ✅ Verified | e2e 02 steps 1–5 |
-| Advanced Editor preserves automatic edits | ✅ Verified | e2e 02 step 6 |
-| Packaging | ✅ Verified | e2e 07 against the built `.app` |
-| Microphone recording | ⚠️ Implemented, **not verified** | Requires a macOS microphone permission prompt that cannot be granted unattended |
-| Permission-denied behaviour | ✅ Verified (UI and main-process refusal) | e2e 04 forces the state via a test-only env hook; the real OS "denied" state was not reproduced |
-| Intel (x86_64) build | ❌ Not built or tested | Helper compiles universal; app packaging targets arm64 only |
+| Studio + Calm | `style-studio.mp4` | h264 1280×720, 150 frames |
+| Editorial + Moments (edited) | `moments.mp4`, `quick.mp4` | h264 1920×1080; cuts shorten the duration exactly |
+| Aura + Follow | `feel-follow.mp4` (Aura via 02's portrait export) | h264; Follow frames match the engine |
+| Canvas + Pulse | `style-canvas.mp4` plus the `cursor-pulse.mp4` treatment | h264; grain and ripple verified |
+| Midnight + Focus | `style-midnight.mp4`, `feel-focus.mp4` | h264; dark backdrop and Focus zoom verified |
+| Manual edits with trims | `trimmed.mp4`, `square-zooms.mp4` | 25.000 s, 1500 frames; time code verified across the cut |
+| Legacy project | `v1-*.mp4` | pixel-identical to 0.1 |
+| Imported video without telemetry | `landscape.mp4`, `portrait-src.mp4` | no synthetic cursor; manual Moments work |
 
-## Code review
+Three samples are committed in `docs/media/`:
 
-Independent automated reviews were run on the finished code:
+- `sample-quick-demo-synthetic.mp4`
+- `sample-real-capture-demo-page.mp4`
+- `sample-focus-camera.mp4`
 
-- **Security review.** It found no critical issues and two high ones: project-supplied media
-  and cursor paths were trusted. Both are fixed: projects are a trust boundary, media must be
-  a real video file in the library, in the project folder, or in Recents; cursor JSON must sit
-  next to the video. Also fixed: IPC sender validation, exact navigation allow-list, webview
-  blocking, a production CSP without dev websockets, `wx` export temp files, one-shot export
-  grants, a minimal helper environment, and Electron fuses. A regression test was added
-  (e2e 04).
-- **Code review.** Twelve medium and low findings were fixed:
-  - trim drags merging neighbours,
-  - float-epsilon drop of minimum-length zooms (unit test added),
-  - serialized saves and recents writes,
-  - media-handle and sample leaks on export errors,
-  - history patching for mode switches and relinks,
-  - double-click creating duplicate zooms,
-  - playhead sync after a leading cut,
-  - the stale frame on cut jumps,
-  - handle floors,
-  - gesture-scoped undo coalescing,
-  - pointercancel cleanup.
+## Failures found during verification, and fixes
 
-## Not verified / limitations
+- **Duplicate Moment ids after a feel change.** An edited auto Moment kept its id, and
+  regeneration created another Moment with that id.
+  - Fixes: unique ids on regeneration, and automatic Moments that overlap a manual one are
+    dropped.
+  - Covered by a unit test and by spec 09.
+- **Muddy light backdrops.** Radial fades went through grey.
+  - Signature presets now fade to the same colour. Classic presets keep the 0.1 fade so legacy
+    output is unchanged.
+- **Focus zoom jumped 0.23× in one frame.** The 0.1 "snappy" easing starts at full velocity.
+  - Fix: a new "crisp" easing that starts at rest, plus a minimum 0.7 s pan hand-off.
+- **Packaged app hung at launch after a rebuild.** The Electron cookie-encryption fuse makes
+  the app read a Keychain item at startup, and macOS blocks on an access prompt for every
+  newly signed build.
+  - Fix: the fuse is disabled. FrameFlow uses no cookies.
+  - Repackaged, and test 07 passes.
+- **Spec 02 timed out at 3.0 min in the loaded full run.** Every assertion had already passed;
+  it was in its final relaunch step. It now has a 7-minute budget and passes (1.4 min).
 
-- Microphone narration: see above.
-- The real OS permission-*denied* flow. The permission was granted on this machine; the UI
-  path was exercised with a test hook.
-- Multi-display setups: one built-in display only.
-- Notarized distribution builds: not attempted; no Developer ID is available.
+## Not verified, and limitations
+
+- **Microphone narration.** The macOS microphone permission was never granted on this
+  machine, and asking would show a system prompt. The code path exists but is untested.
+- **The real OS "denied" permission state.** It is exercised through a test-only environment
+  hook, because permission is granted here.
+- **Multi-display capture.** Only a single built-in display was available.
+- **Intel builds.** The helper is built universal, but the app was packaged for arm64 only.
+- **Notarized distribution.** No Developer ID was available.
+
+---
+
+# Appendix: FrameFlow 0.1 verification (historical)
+
+0.1 was verified with: lint and typecheck clean, 53/53 unit tests, 14/14 end-to-end tests
+(including real capture), and 1080p60 exports inspected with ffprobe. The full table is in
+the git history of this file (commit `0b6ab88`).

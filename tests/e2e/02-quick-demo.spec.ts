@@ -21,6 +21,8 @@ function zoomExtremes(project: Project): { zoomed: number; scale: number } {
 }
 
 test('Quick Demo: record → automatic Moments → export → Timeline → edit → reopen', async () => {
+  // A long journey: a recording, four exports and a relaunch.
+  test.setTimeout(420_000)
   const { app, page, dir, library } = await launch({ synthetic: true })
   try {
     // 1. Record a demo.

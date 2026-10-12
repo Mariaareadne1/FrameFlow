@@ -13,6 +13,8 @@ FrameFlow itself is released under the MIT License (see `LICENSE`).
 | [lucide-react](https://github.com/lucide-icons/lucide) | 1.x | ISC | Icons |
 | [clsx](https://github.com/lukeed/clsx) | 2.x | MIT | Class names |
 | [Tailwind CSS](https://github.com/tailwindlabs/tailwindcss) | 4.x | MIT | Generated stylesheet |
+| [Inter](https://github.com/rsms/inter) via `@fontsource-variable/inter` | 4.x / 5.x | SIL OFL 1.1 | Interface typeface (bundled, offline) |
+| [Instrument Serif](https://github.com/Instrument/instrument-serif) via `@fontsource/instrument-serif` | 5.x | SIL OFL 1.1 | Display typeface (bundled, offline) |
 
 The native capture helper uses only Apple system frameworks (ScreenCaptureKit, AVFoundation,
 AppKit, CoreMedia).

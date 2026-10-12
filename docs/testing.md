@@ -11,7 +11,8 @@
 | `npm run test:e2e` | Builds the app, then runs Playwright Electron tests (`tests/e2e`) |
 | `npm run package` then `npx playwright test 07` | Smoke-tests the packaged `.app` |
 | `FRAMEFLOW_REAL_CAPTURE=1 npx playwright test 05` | Real ScreenCaptureKit capture (opt-in) |
-| `FRAMEFLOW_SCREENSHOTS=1 npx playwright test 08` | Regenerates `docs/media` screenshots |
+| `FRAMEFLOW_SCREENSHOTS=1 npx playwright test 08` | Visual-QA screenshots → `tests/.artifacts/look` (`=docs` → `docs/media`) |
+| `FRAMEFLOW_CAPTURE_GOLDEN=1 npx playwright test --config tests/legacy-golden/playwright.config.ts` | Re-captures 0.1 golden frames (only meaningful on a 0.1 build) |
 
 Run `npm run fixtures` once before the end-to-end tests.
 
@@ -58,6 +59,21 @@ which does not click) and drives the page with Playwright. It then checks:
 - that automatic zooms were generated,
 - that an export succeeds.
 
+## End-to-end specs
+
+| Spec | Covers |
+|---|---|
+| 01 import-export | launch, import, play/pause/seek, 1080p60 export |
+| 02 quick-demo | synthetic recording → Studio with automatic Moments → export without the Timeline → Still vs Calm pixels → Aura/9:16 export → Timeline shows the same Moments → edit → undo/redo → relaunch + reopen |
+| 03 editing | background/padding preview pixels, cuts verified by time code, manual Moments on a video without telemetry, drag/delete/undo, square export; very short clip, portrait source, AAC through a cut |
+| 04 robustness | permission denied, missing-media relink, export cancel/unwritable, discard, quit mid-recording, crafted project trust boundary |
+| 05 real-capture (opt-in) | real ScreenCaptureKit window capture of a local demo page |
+| 06 long-recording | 5-minute recording open/edit/export memory + speed; 60-project gallery |
+| 07 packaged-app | the built `.app` records via its bundled helper and exports; no DevTools |
+| 09 moments | thumbnails decoded and matched to each Moment's time code, seek on select, rename/zoom edits become manual, feel changes keep edits, disable/delete/undo/redo/add, cuts keep source time, cut-out Moments, Timeline drag ↔ Moment sync, export |
+| 10 creative | all five styles exported (720p30) with backdrop colour/grain checks; custom padding across 9:16 and 1:1; Still/Calm/Follow/Focus exports checked against the shared camera engine at 19 instants; Natural/Halo/Spotlight/Pulse checked around a click; **preview vs export parity** |
+| 11 legacy-projects | three real 0.1 projects: open unchanged, export compared with frames exported by 0.1, edit → saved as v2 with `.v1.bak`, reopen |
+
 ## How exports are verified
 
 `tests/support/media.ts` wraps ffprobe and ffmpeg:
@@ -83,6 +99,13 @@ The exports are asserted as follows:
   layout function (`computeLayout`).
 - **Preview:** the preview canvas pixels change immediately when the background or padding
   changes.
+- **Parity:** the preview canvas is read back (PNG) and compared with the exported frame at
+  the same output time — mean absolute difference must stay under 6/255 (encoding noise).
+- **Legacy:** exported frames of migrated 0.1 projects are compared with golden frames
+  exported by 0.1 itself (`tests/fixtures/legacy/golden`), threshold 2.5/255.
+- **Camera:** for every feel, the saved project is fed to the shared engine to predict the
+  camera; exported frames must differ from Still wherever the engine predicts a zoom and match
+  Still wherever it predicts none.
 
 ## Unit tests
 
