@@ -31,3 +31,12 @@ mac:
     NSScreenCaptureUsageDescription: FrameFlow records the screen or window you choose to create demo videos.
 dmg:
   title: FrameFlow
+electronFuses:
+  runAsNode: false
+  enableCookieEncryption: true
+  enableNodeOptionsEnvironmentVariable: false
+  # Kept enabled so the packaged app can be driven by the automated smoke test (Playwright
+  # attaches via --inspect). Set to false for public distribution builds.
+  enableNodeCliInspectArguments: true
+  enableEmbeddedAsarIntegrityValidation: true
+  onlyLoadAppFromAsar: true
