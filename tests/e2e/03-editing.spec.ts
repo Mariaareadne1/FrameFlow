@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { join } from 'node:path'
 import { computeLayout, outputSize } from '../../src/shared/engine/layout'
 import type { FrameStyle } from '../../src/shared/project'
-import { ARTIFACTS, copyFixture, exportVia, launch, savedProject, stubOpenDialog } from './helpers'
+import { ARTIFACTS, copyFixture, exportVia, launch, openPanel, savedProject, stubOpenDialog } from './helpers'
 import { decodeErrors, frameAt, frameDiff, pixel, probe, readTimecode, savePng } from '../support/media'
 
 const SRC_W = 1920
@@ -39,11 +39,13 @@ test('editing: trims, manual zooms, styling — preview and exports stay in sync
     const src = copyFixture(dir, 'demo-1920x1200.mp4')
     await stubOpenDialog(app, src)
     await page.getByTestId('import-video').click()
-    await expect(page.getByTestId('advanced-editor')).toBeVisible()
+    await expect(page.getByTestId('studio')).toBeVisible()
     await page.waitForTimeout(600)
     const duration = 30
 
     // --- Background change updates the preview immediately ---
+    await openPanel(page, 'design')
+    await page.waitForTimeout(300)
     const before = await previewPixel(page, 0.01, 0.5)
     await page.getByRole('radio', { name: 'Solid #2563eb' }).click()
     await page.waitForTimeout(150)
@@ -59,6 +61,7 @@ test('editing: trims, manual zooms, styling — preview and exports stay in sync
     expect(edge[2]!).toBeGreaterThan(200)
 
     // --- Trim: cut 5s..10s via the Cut tool + inspector ---
+    await openPanel(page, 'timeline')
     await seek(page, 5, duration)
     await page.getByTestId('add-cut').click()
     await expect(page.getByTestId('trim-inspector')).toBeVisible()
@@ -66,8 +69,8 @@ test('editing: trims, manual zooms, styling — preview and exports stay in sync
     await page.getByRole('textbox', { name: 'Start' }).press('Enter')
     await page.getByRole('textbox', { name: 'End' }).fill('10')
     await page.getByRole('textbox', { name: 'End' }).press('Enter')
-    await expect(page.getByTestId('timecode')).toContainText('/ 0:25.0')
-    await page.getByRole('button', { name: 'Done' }).click()
+    await expect(page.getByTestId('duration')).toHaveText('0:25.0')
+    await page.keyboard.press('Escape')
 
     // --- Export 1: landscape, trimmed, custom background & framing, no zoom ---
     const trimmedOut = join(dir, 'trimmed.mp4')
@@ -97,15 +100,15 @@ test('editing: trims, manual zooms, styling — preview and exports stay in sync
     // --- Manual zooms on a video without cursor data ---
     await seek(page, 12, duration)
     await page.keyboard.press('z')
-    await expect(page.getByTestId('zoom-inspector')).toBeVisible()
-    await page.getByRole('button', { name: 'Done' }).click()
+    await expect(page.getByTestId('moment-inspector')).toBeVisible()
+    await page.keyboard.press('Escape')
     await seek(page, 20, duration)
     await page.getByTestId('add-zoom').click()
-    await page.getByRole('button', { name: 'Done' }).click()
+    await page.keyboard.press('Escape')
     // A zoom right at the end of the clip is clamped inside it.
     await seek(page, 29.9, duration)
     await page.keyboard.press('z')
-    await page.getByRole('button', { name: 'Done' }).click()
+    await page.keyboard.press('Escape')
     let p = (await savedProject(page, library)).json
     expect(p.zooms).toHaveLength(3)
     for (const z of p.zooms) {
@@ -140,7 +143,8 @@ test('editing: trims, manual zooms, styling — preview and exports stay in sync
     expect(p.zooms).toHaveLength(2)
 
     // --- Export 2: square with zooms ---
-    await page.getByRole('radio', { name: '1:1' }).click()
+    await openPanel(page, 'design')
+    await page.getByTestId('design-panel').getByRole('radio', { name: '1:1' }).click()
     const squareOut = join(dir, 'square-zooms.mp4')
     await exportVia(page, app, squareOut)
     const si = probe(squareOut)
@@ -170,9 +174,9 @@ test('edge cases: very short clip, portrait source, audio passthrough', async ()
     const short = copyFixture(dir, 'short-1280x720.mp4')
     await stubOpenDialog(app, short)
     await page.getByTestId('import-video').click()
-    await expect(page.getByTestId('advanced-editor')).toBeVisible()
+    await expect(page.getByTestId('studio')).toBeVisible()
     await page.keyboard.press('z')
-    await page.getByRole('button', { name: 'Done' }).click()
+    await page.keyboard.press('Escape')
     const shortOut = join(dir, 'short.mp4')
     await exportVia(page, app, shortOut)
     const s = probe(shortOut)
@@ -184,7 +188,7 @@ test('edge cases: very short clip, portrait source, audio passthrough', async ()
     const portrait = copyFixture(dir, 'portrait-1080x1920.mp4')
     await stubOpenDialog(app, portrait)
     await page.getByTestId('import-video').click()
-    await expect(page.getByTestId('timecode')).toContainText('/ 0:06.0')
+    await expect(page.getByTestId('duration')).toHaveText('0:06.0')
     const pOut = join(dir, 'portrait-src.mp4')
     await exportVia(page, app, pOut)
     expect(probe(pOut)).toMatchObject({ width: 1920, height: 1080 })
@@ -195,12 +199,13 @@ test('edge cases: very short clip, portrait source, audio passthrough', async ()
     const tone = copyFixture(dir, 'tone-1280x800.mp4')
     await stubOpenDialog(app, tone)
     await page.getByTestId('import-video').click()
+    await openPanel(page, 'timeline')
     await page.getByTestId('add-cut').click()
     await page.getByRole('textbox', { name: 'Start' }).fill('2')
     await page.getByRole('textbox', { name: 'Start' }).press('Enter')
     await page.getByRole('textbox', { name: 'End' }).fill('4')
     await page.getByRole('textbox', { name: 'End' }).press('Enter')
-    await page.getByRole('button', { name: 'Done' }).click()
+    await page.keyboard.press('Escape')
     const aOut = join(dir, 'audio.mp4')
     await exportVia(page, app, aOut)
     const a = probe(aOut)

@@ -32,16 +32,18 @@ test('5-minute recording: opens quickly, edits stay responsive, export streams w
 
     await stubOpenDialog(app, projPath)
     const t0 = Date.now()
-    await page.getByRole('button', { name: 'Open Project…' }).click()
-    await expect(page.getByTestId('quick-demo')).toBeVisible()
-    await page.getByRole('button', { name: 'Play' }).first().waitFor()
+    await page.getByTestId('open-project-file').click()
+    await expect(page.getByTestId('studio')).toBeVisible()
+    await page.getByTestId('play-toggle').waitFor()
     const openMs = Date.now() - t0
 
+    await page.getByTestId('dock-design').click()
+    await page.getByTestId('style-midnight').waitFor()
     // Responsiveness: time 20 style edits (each rebuilds the scene and redraws the preview).
     const editMs = await page.evaluate(async () => {
       const start = performance.now()
       for (let i = 0; i < 20; i++) {
-        const btn = document.querySelector(i % 2 ? '[data-testid="style-minimal"]' : '[data-testid="style-clean"]') as HTMLButtonElement
+        const btn = document.querySelector(i % 2 ? '[data-testid="style-midnight"]' : '[data-testid="style-editorial"]') as HTMLButtonElement
         btn.click()
         await new Promise((r) => requestAnimationFrame(() => r(null)))
       }

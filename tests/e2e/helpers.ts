@@ -1,5 +1,7 @@
-import { _electron as electron, type ElectronApplication, type Page } from '@playwright/test'
-import { cpSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, statSync } from 'node:fs'
+import { _electron as electron, expect, type ElectronApplication, type Page } from '@playwright/test'
+import { cpSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
+import { createProject, type CreateProjectOptions } from '../../src/shared/projectModel'
+import { parseCursorTrack } from '../../src/shared/engine/cursor'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 
@@ -37,7 +39,7 @@ export async function launch(opts: { synthetic?: boolean; env?: Record<string, s
   })
   await page.waitForLoadState('domcontentloaded')
   // No countdown in tests; keep other defaults.
-  await page.evaluate(() => localStorage.setItem('frameflow.prefs.v1', JSON.stringify({ style: 'clean', autoZoom: 'subtle', countdown: 0, microphone: false })))
+  await page.evaluate(() => localStorage.setItem('frameflow.prefs.v2', JSON.stringify({ style: 'editorial', camera: 'calm', cursor: 'halo', countdown: 0, microphone: false })))
   await page.reload()
   return { app, page, dir, library }
 }
@@ -60,6 +62,14 @@ export function copyFixture(dir: string, name: string): string {
   const dest = join(dir, name)
   cpSync(join(FIXTURES, name), dest)
   return dest
+}
+
+/** Opens the Design/Camera/Cursor panel (idempotent). */
+export async function openPanel(page: Page, name: 'design' | 'camera' | 'cursor' | 'timeline' | 'moments'): Promise<void> {
+  const section = await page.getByTestId('studio').getAttribute('data-section')
+  const panelOpen = await page.getByTestId(`${name}-panel`).isVisible().catch(() => false)
+  if (section === name && (name === 'timeline' || name === 'moments' || panelOpen)) return
+  await page.getByTestId(`dock-${name}`).click()
 }
 
 export async function exportVia(page: Page, app: ElectronApplication, dest: string): Promise<void> {
@@ -94,3 +104,25 @@ export function findProjects(dir: string): string[] {
 
 /** Loosely typed view of a project file, for assertions. */
 export type SavedProject = import('../../src/shared/project').Project
+
+/** Writes a recorded-style project (demo fixture + its cursor data) into the library and opens it. */
+export async function openDemoProject(page: Page, app: ElectronApplication, library: string, opts: Partial<CreateProjectOptions> = {}) {
+  const video = join(FIXTURES, 'demo-1920x1200.mp4')
+  const cursorPath = join(FIXTURES, 'demo-1920x1200.cursor.json')
+  const track = parseCursorTrack(JSON.parse(readFileSync(cursorPath, 'utf8')))
+  const project = createProject({
+    name: 'Moments demo',
+    media: { path: video, width: 1920, height: 1200, duration: 30, hasAudio: false, cursorPath, cursorEmbedded: false },
+    cursorTrack: track,
+    ...opts,
+  })
+  const folder = join(library, `p-${Date.now()}`)
+  mkdirSync(folder, { recursive: true })
+  const file = join(folder, 'Moments demo.frameflow')
+  writeFileSync(file, JSON.stringify(project))
+  await stubOpenDialog(app, file)
+  await page.getByTestId('open-project-file').click()
+  await expect(page.getByTestId('studio')).toBeVisible()
+  return project
+}
+

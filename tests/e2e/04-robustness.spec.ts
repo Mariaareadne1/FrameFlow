@@ -6,7 +6,7 @@ import { ARTIFACTS, copyFixture, launch, savedProject, stubOpenDialog, stubSaveD
 test('permission denied shows guidance instead of recording', async () => {
   const { app, page } = await launch({ env: { FRAMEFLOW_FORCE_PERMISSION: 'denied' } })
   try {
-    await page.getByTestId('start-quick-demo').click()
+    await page.getByTestId('record-demo').click()
     await expect(page.getByTestId('permission-guidance')).toBeVisible()
     await expect(page.getByRole('button', { name: 'Open System Settings' })).toBeVisible()
     await expect(page.getByTestId('start-recording')).toHaveCount(0)
@@ -30,19 +30,19 @@ test('a project whose video moved can be relinked', async () => {
     const src = copyFixture(dir, 'short-1280x720.mp4')
     await stubOpenDialog(app, src)
     await page.getByTestId('import-video').click()
-    await expect(page.getByTestId('advanced-editor')).toBeVisible()
+    await expect(page.getByTestId('studio')).toBeVisible()
     await page.keyboard.press('z')
     const { json } = await savedProject(page, library)
     await page.getByTestId('go-home').click()
 
     const moved = join(dir, 'moved.mp4')
     renameSync(src, moved)
-    await page.getByTestId('recent-projects').getByRole('button').first().click()
+    await page.locator('[data-testid="project-card"] button').first().click()
     await expect(page.getByTestId('missing-media')).toBeVisible()
     await page.screenshot({ path: join(ARTIFACTS, 'missing-media.png') })
 
     await stubOpenDialog(app, moved)
-    await page.getByRole('button', { name: 'Locate Video…' }).click()
+    await page.getByRole('button', { name: 'Locate video…' }).click()
     await expect(page.getByTestId('preview-canvas')).toBeVisible()
     const after = (await savedProject(page, library)).json
     expect(after.media.path).toBe(moved)
@@ -58,7 +58,7 @@ test('cancelling an export leaves no file behind and keeps the project intact', 
     const src = copyFixture(dir, 'demo-1920x1200.mp4')
     await stubOpenDialog(app, src)
     await page.getByTestId('import-video').click()
-    await expect(page.getByTestId('advanced-editor')).toBeVisible()
+    await expect(page.getByTestId('studio')).toBeVisible()
     const before = (await savedProject(page, library)).json
     const out = join(dir, 'cancelled.mp4')
     await stubSaveDialog(app, out)
@@ -66,7 +66,7 @@ test('cancelling an export leaves no file behind and keeps the project intact', 
     await page.getByTestId('export-start').click()
     await expect(page.getByTestId('export-progress')).toBeVisible()
     await page.waitForTimeout(1500)
-    await page.getByRole('button', { name: 'Cancel' }).click()
+    await page.getByRole('button', { name: 'Cancel export' }).click()
     await expect(page.getByTestId('export-start')).toBeVisible()
     await page.waitForTimeout(500)
     expect(existsSync(out)).toBe(false)
@@ -83,7 +83,7 @@ test('an export to an unwritable location fails with a clear message', async () 
     const src = copyFixture(dir, 'short-1280x720.mp4')
     await stubOpenDialog(app, src)
     await page.getByTestId('import-video').click()
-    await expect(page.getByTestId('advanced-editor')).toBeVisible()
+    await expect(page.getByTestId('studio')).toBeVisible()
     await stubSaveDialog(app, join(dir, 'no-such-folder', 'out.mp4'))
     await page.getByTestId('open-export').click()
     await page.getByTestId('export-start').click()
@@ -97,7 +97,7 @@ test('an export to an unwritable location fails with a clear message', async () 
 test('discarding a recording deletes it and returns to setup', async () => {
   const { app, page, library } = await launch({ synthetic: true })
   try {
-    await page.getByTestId('start-quick-demo').click()
+    await page.getByTestId('record-demo').click()
     await page.getByTestId('start-recording').click()
     await expect(page.getByTestId('recording-status')).toContainText('Recording')
     await page.waitForTimeout(1500)
@@ -113,7 +113,7 @@ test('discarding a recording deletes it and returns to setup', async () => {
 
 test('quitting during a recording still leaves a playable file', async () => {
   const { app, page, library } = await launch({ synthetic: true })
-  await page.getByTestId('start-quick-demo').click()
+  await page.getByTestId('record-demo').click()
   await page.getByTestId('start-recording').click()
   await expect(page.getByTestId('recording-status')).toContainText('Recording')
   await page.waitForTimeout(2500)
@@ -142,7 +142,7 @@ test('a crafted project cannot grant access to arbitrary files', async () => {
       JSON.stringify({ version: 1, name: 'Evil', media: { path: '/etc/hosts', width: 100, height: 100, duration: 5, cursorPath: join(dir, 'secret.json') } }),
     )
     await stubOpenDialog(app, evil)
-    await page.getByRole('button', { name: 'Open Project…' }).click()
+    await page.getByTestId('open-project-file').click()
     await expect(page.getByTestId('missing-media')).toBeVisible()
     const result = await page.evaluate(async () => {
       const read = await window.frameflow.media.open('/etc/hosts').then(() => 'read', (e: Error) => e.message)

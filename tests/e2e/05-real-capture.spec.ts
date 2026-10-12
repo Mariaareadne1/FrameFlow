@@ -22,9 +22,9 @@ test('real window capture of a local demo page → Quick Demo → export', async
 
   const { app, page, dir, library } = await launch()
   try {
-    await page.evaluate(() => localStorage.setItem('frameflow.prefs.v1', JSON.stringify({ style: 'clean', autoZoom: 'dynamic', countdown: 0, microphone: false })))
+    await page.evaluate(() => localStorage.setItem('frameflow.prefs.v2', JSON.stringify({ style: 'editorial', camera: 'follow', countdown: 0, microphone: false })))
     await page.reload()
-    await page.getByTestId('start-quick-demo').click()
+    await page.getByTestId('record-demo').click()
     await page.getByRole('radio', { name: 'Windows' }).click()
     await page.getByRole('option', { name: /FrameFlow Demo Target/ }).first().click()
     await page.screenshot({ path: join(ARTIFACTS, 'record-setup-windows.png') })
@@ -46,7 +46,7 @@ test('real window capture of a local demo page → Quick Demo → export', async
     await demoPage.waitForTimeout(1500)
 
     await page.getByTestId('stop-recording').click()
-    await expect(page.getByTestId('quick-demo')).toBeVisible({ timeout: 30_000 })
+    await expect(page.getByTestId('studio')).toBeVisible({ timeout: 30_000 })
     await page.waitForTimeout(800)
     await page.screenshot({ path: join(ARTIFACTS, 'real-capture-quick-demo.png') })
 
