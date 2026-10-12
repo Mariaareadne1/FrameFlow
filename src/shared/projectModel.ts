@@ -18,9 +18,9 @@ import {
   type ZoomEvent,
   type ZoomFocus,
 } from './project'
-import { BACKGROUND_PRESETS, DEFAULT_STYLE, LEGACY_STYLE_PRESETS, STYLE_PRESETS, findStylePreset } from './styles'
+import { BACKGROUND_PRESETS, DEFAULT_STYLE, LEGACY_STYLE_PRESETS, findStylePreset } from './styles'
 import { NEUTRAL_TUNING, regenerateAutoZooms } from './engine/autoZoom'
-import { DEFAULT_TRANSITION, MAX_ZOOM_SCALE, MIN_ZOOM_DURATION } from './engine/camera'
+import { DEFAULT_TRANSITION, LEGACY_HANDOFF, MAX_ZOOM_SCALE, MIN_HANDOFF, MIN_ZOOM_DURATION } from './engine/camera'
 import { clamp, normalizeTrims } from './engine/timeline'
 
 export function newId(prefix: string): string {
@@ -49,7 +49,7 @@ export const DEFAULT_DEADZONE = 0.04
 
 export function defaultCamera(feel: CameraFeel): CameraSettings {
   const tuning = feel === 'still' ? NEUTRAL_TUNING.calm : NEUTRAL_TUNING[feel]
-  return { feel, ...tuning, followSmoothing: 0.5, deadzone: DEFAULT_DEADZONE }
+  return { feel, ...tuning, followSmoothing: 0.5, deadzone: DEFAULT_DEADZONE, minHandoff: MIN_HANDOFF }
 }
 
 function tuningOf(camera: CameraSettings) {
@@ -109,7 +109,7 @@ export function applyStyle(project: Project, id: StylePresetId): Project {
 
 /** Marks the look as customised (after manual background/frame edits). */
 export function customizeLook(project: Project, patch: Partial<Pick<Project, 'background' | 'frame'>>): Project {
-  return { ...project, ...patch, style: STYLE_PRESETS.some((s) => s.id === project.style) || project.style === 'custom' ? 'custom' : project.style }
+  return { ...project, ...patch, style: 'custom' }
 }
 
 /**
@@ -135,6 +135,7 @@ export function tuneCamera(project: Project, patch: Partial<Omit<CameraSettings,
     softness: clamp(camera.softness, 0, 1),
     followSmoothing: clamp(camera.followSmoothing, 0, 1),
     deadzone: clamp(camera.deadzone, 0, 0.15),
+    minHandoff: clamp(camera.minHandoff, 0, 2),
   }
   const regenerate = patch.intensity !== undefined || patch.speed !== undefined || patch.softness !== undefined
   return {
@@ -233,7 +234,7 @@ const LEGACY_LEVELS: readonly LegacyAutoZoomLevel[] = ['off', 'subtle', 'dynamic
 const STYLES: readonly StylePresetId[] = ['studio', 'editorial', 'aura', 'canvas', 'midnight', 'clean', 'minimal', 'colorful', 'custom']
 const FEELS: readonly CameraFeel[] = ['still', 'calm', 'follow', 'focus']
 const EFFECTS: readonly CursorEffect[] = ['natural', 'halo', 'spotlight', 'pulse']
-const HEX = /^#[0-9a-fA-F]{3,8}$/
+const HEX = /^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$/
 const MAX_EVENTS = 2000
 
 /** 0.1 → 2.0 camera mapping. Stored zooms are kept verbatim, so output is unchanged. */
@@ -273,7 +274,8 @@ function parseZoom(v: unknown, duration: number): ZoomEvent | null {
       focus,
       easing: oneOf(v.easing, EASING_IDS, 'smooth'),
       transition: num(v.transition, DEFAULT_TRANSITION),
-      origin: v.origin === 'auto' ? 'auto' : 'manual',
+      // A named or disabled Moment is a user edit: never let regeneration discard it.
+      origin: v.origin === 'auto' && !(typeof v.label === 'string' && v.label.trim()) && v.disabled !== true ? 'auto' : 'manual',
       ...(typeof v.label === 'string' && v.label.trim() ? { label: v.label.trim().slice(0, 80) } : {}),
       ...(v.disabled === true ? { disabled: true } : {}),
     },
@@ -285,7 +287,7 @@ function parseCamera(raw: Obj, version: number): CameraSettings {
   if (version < 2 || !isObj(raw.camera)) {
     // Migration from 0.1: keep the old camera exactly (no dead zone, 0.45 s follow smoothing).
     const feel = LEGACY_FEEL[oneOf(raw.autoZoom, LEGACY_LEVELS, 'off')]
-    return { ...defaultCamera(feel), followSmoothing: 0.5, deadzone: 0 }
+    return { ...defaultCamera(feel), followSmoothing: 0.5, deadzone: 0, minHandoff: LEGACY_HANDOFF }
   }
   const c = raw.camera
   const feel = oneOf(c.feel, FEELS, 'still')
@@ -297,6 +299,7 @@ function parseCamera(raw: Obj, version: number): CameraSettings {
     softness: clamp(num(c.softness, base.softness), 0, 1),
     followSmoothing: clamp(num(c.followSmoothing, 0.5), 0, 1),
     deadzone: clamp(num(c.deadzone, 0), 0, 0.15),
+    minHandoff: clamp(num(c.minHandoff, MIN_HANDOFF), 0, 2),
   }
 }
 

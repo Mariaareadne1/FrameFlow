@@ -1,4 +1,6 @@
+import { useEffect } from 'react'
 import { useEditor } from '../state/editorStore'
+import { releaseGrabber } from '../lib/frameGrabber'
 import { useStudio } from '../state/studioStore'
 import { useEditorShortcuts } from '../lib/shortcuts'
 import { Preview } from '../components/Preview'
@@ -24,6 +26,7 @@ export function Studio() {
   const section = useStudio((s) => s.section)
   const drawer = useStudio((s) => s.drawer)
   useEditorShortcuts(section === 'timeline')
+  useEffect(() => releaseGrabber, [])
   if (!project) return null
 
   const zoom = selection?.kind === 'zoom' ? project.zooms.find((z) => z.id === selection.id) : undefined

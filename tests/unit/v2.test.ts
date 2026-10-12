@@ -178,7 +178,8 @@ describe('styles and cursor treatments', () => {
     expect(p.style).toBe('editorial')
     expect(customizeLook(p, { frame: { ...p.frame, padding: 0.2 } }).style).toBe('custom')
     const legacyP = parseProject(legacy('v1-recording'))
-    expect(customizeLook(legacyP, { frame: { ...legacyP.frame, padding: 0.2 } }).style).toBe('colorful')
+    expect(customizeLook(legacyP, { frame: { ...legacyP.frame, padding: 0.2 } }).style).toBe('custom')
+    expect(legacyP.style).toBe('colorful')
   })
   test('cursor effect keeps the legacy clickEffect flag in sync', () => {
     const p = createProject({ name: 'x', media, cursorTrack: track })
@@ -210,5 +211,34 @@ describe('regeneration hygiene', () => {
       const edited = p.zooms.find((z) => z.id === id)!
       expect(p.zooms.filter((z) => z.origin === 'auto' && z.start < edited.end && edited.start < z.end)).toEqual([])
     }
+  })
+})
+
+describe('review fixes', () => {
+  test('migrated projects keep the 0.1 pan hand-off; new projects get the longer one', () => {
+    expect(parseProject(legacy('v1-recording')).camera.minHandoff).toBe(0.05)
+    expect(createProject({ name: 'n', media, cursorTrack: track }).camera.minHandoff).toBe(0.7)
+  })
+  test('the hand-off setting changes chained pans only where ramps are short', async () => {
+    const { cameraAt: cam } = await import('@shared/engine/camera')
+    const z = (id: string, start: number, end: number, x: number) => ({ id, start, end, scale: 2, focus: { mode: 'fixed' as const, x, y: 0.5 }, easing: 'smooth' as const, transition: 0.2, origin: 'manual' as const })
+    const chain = [z('a', 0, 2, 0.25), z('b', 2.1, 4, 0.75)]
+    expect(cam(chain, null, 2.05, 0.05).cx).not.toBeCloseTo(cam(chain, null, 2.05, 0.7).cx, 3)
+  })
+  test('named or disabled automatic Moments are treated as edits on load', () => {
+    const p = createProject({ name: 'x', media, cursorTrack: track })
+    const raw = JSON.parse(JSON.stringify(p))
+    raw.zooms[0].label = 'Hand named'
+    raw.zooms[1].disabled = true
+    const q = parseProject(raw)
+    expect(q.zooms[0]!.origin).toBe('manual')
+    expect(q.zooms[1]!.origin).toBe('manual')
+  })
+  test('only 3- or 6-digit shadow tints are accepted', () => {
+    const p = createProject({ name: 'x', media, cursorTrack: null })
+    const bad = parseProject({ ...JSON.parse(JSON.stringify(p)), frame: { ...p.frame, shadowTint: '#12345' } })
+    expect(bad.frame.shadowTint).toBeUndefined()
+    const ok = parseProject({ ...JSON.parse(JSON.stringify(p)), frame: { ...p.frame, shadowTint: '#abc' } })
+    expect(ok.frame.shadowTint).toBe('#abc')
   })
 })

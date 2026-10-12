@@ -20,6 +20,7 @@ export interface RenderScene {
   cursorPath: SmoothPath | null
   cameraPath: SmoothPath | null
   clicks: ClickEvent[]
+  minHandoff: number
 }
 
 /**
@@ -58,11 +59,12 @@ export function buildScene(project: Project, track: CursorTrack | null): RenderS
     cursorPath: hasTrack ? cachedPath(track, `c:${duration}:${cursorSmooth}`, () => buildSmoothPath(track.samples, duration, cursorSmooth)) : null,
     cameraPath: hasTrack ? cachedPath(track, `k:${duration}:${camSmooth}:${deadzone}`, () => buildCameraPath(track.samples, duration, camSmooth, deadzone)) : null,
     clicks: hasTrack ? track.clicks : [],
+    minHandoff: project.camera.minHandoff,
   }
 }
 
 export function sceneCamera(scene: RenderScene, t: number): Camera {
-  return cameraAt(scene.zooms, scene.cameraPath, t)
+  return cameraAt(scene.zooms, scene.cameraPath, t, scene.minHandoff)
 }
 
 // ---------------------------------------------------------------------------------------
@@ -161,7 +163,7 @@ function transparentOf(color: string): string {
 
 function hexToRgb(hex: string): [number, number, number] {
   const h = hex.replace('#', '')
-  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h.slice(0, 6)
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h.padEnd(6, '0').slice(0, 6)
   const n = parseInt(full, 16)
   return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
 }
@@ -173,12 +175,17 @@ function roundRectPath(ctx: Ctx2D, x: number, y: number, w: number, h: number, r
 
 /** Background + drop shadow never change during playback, so they are cached. */
 const backdropCache = new Map<string, OffscreenCanvas>()
-const BACKDROP_CACHE_LIMIT = 4
+const BACKDROP_CACHE_LIMIT = 12
 
 function getBackdrop(size: Size, scene: RenderScene, layout: FrameLayout): OffscreenCanvas {
   const key = JSON.stringify([size.width, size.height, scene.background, layout.video, layout.radius, layout.shadow, scene.frame.shadowTint ?? null])
   const hit = backdropCache.get(key)
-  if (hit) return hit
+  if (hit) {
+    // LRU: move to the back so the preview and the style cards don't evict each other.
+    backdropCache.delete(key)
+    backdropCache.set(key, hit)
+    return hit
+  }
   const canvas = new OffscreenCanvas(size.width, size.height)
   const ctx = canvas.getContext('2d')
   if (!ctx) throw new Error('Could not create a 2D canvas for the background.')

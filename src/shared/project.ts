@@ -108,6 +108,8 @@ export interface CameraSettings {
   followSmoothing: number
   /** Cursor movement (normalized) ignored before the camera starts to follow. */
   deadzone: number
+  /** Shortest pan between chained Moments, seconds (0.7; migrated 0.1 projects keep 0.05). */
+  minHandoff: number
 }
 
 export interface ExportSettings {

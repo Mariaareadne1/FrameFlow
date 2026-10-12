@@ -21,8 +21,28 @@ preserved at the end of this file.
 | E2E, full suite | `FRAMEFLOW_REAL_CAPTURE=1 npx playwright test` | 21 passed, 1 failed (02, timeout only), 1 skipped (08 screenshot generator) |
 | E2E, reruns after fixes | `npx playwright test 02 04` and then `07` on the repackaged app | ✅ 02 passed, 04 passed (7/7), 07 passed |
 
-**Net result: all 22 functional end-to-end tests pass on the final code.** The only skipped
-test is the docs screenshot generator. It also ran successfully, separately.
+**Net result: all 22 functional end-to-end tests pass.** The only skipped test is the docs
+screenshot generator, which also ran successfully on its own.
+
+### After the independent code review
+
+The review fixes are listed in "Failures and fixes" below. After them, everything was re-run
+on the final commit:
+
+- Unit tests: **86/86**.
+- End-to-end, rerun: 01, 02, 04 (7/7), 06 (gallery and 5-minute), 07 (repackaged app),
+  09, 10 (3/3) and 11 (3/3). **18 + 2 passed.** Legacy projects are still pixel-identical
+  (0.00), and parity is 2.35, 2.18 and 4.66 out of 255.
+- Spec 03 failed once in that combined run: a test-timing race, where it acted before a ruler
+  seek had landed. After hardening the seek helper, 03 passed 2/2 and its editing test passed
+  4 more consecutive runs.
+- **Spec 05 (real capture) could not be rerun after the review fixes.** By then the Mac's
+  display was **asleep**: `CGDisplayIsAsleep` = 1, with no active displays, so ScreenCaptureKit
+  had no pixels to capture and the source thumbnails were blank. I did not wake the display.
+  - Real capture last passed on the 2.0 build at 18:44 in the full run.
+  - None of the review fixes touch the capture helper, `capture.ts` or the recording UI.
+  - 5-minute performance at lower load: open 208 ms, edit 9.5 ms, export 2.86× realtime,
+    peak RSS 379 MB.
 
 ## End-to-end tests
 
@@ -143,6 +163,23 @@ Three samples are committed in `docs/media/`:
   newly signed build.
   - Fix: the fuse is disabled. FrameFlow uses no cookies.
   - Repackaged, and test 07 passes.
+- **Independent code review (no HIGH issues).** Fixes:
+  - The minimum pan hand-off is now a per-project setting. Migrated 0.1 projects keep
+    0.05 s, so chained short-ramp zooms render exactly as before.
+  - The backdrop cache is now LRU with 12 entries, so live style cards don't evict the
+    preview.
+  - Style cards and the export preview redraw after a seek lands. The throttle timer is
+    cleaned up.
+  - Writes to the same project file are serialized, so a rename from the gallery can't race
+    an autosave.
+  - Recents checks are async.
+  - The missing-video badge only stores granted paths.
+  - The frame grabber recovers from a failed load and releases its video when leaving the
+    Studio.
+  - `shadowTint` must be 3- or 6-digit hex.
+  - Named or disabled automatic Moments load as edits.
+  - Edited legacy looks become "custom".
+  - Covered by 4 new unit tests.
 - **Spec 02 timed out at 3.0 min in the loaded full run.** Every assertion had already passed;
   it was in its final relaunch step. It now has a 7-minute budget and passes (1.4 min).
 

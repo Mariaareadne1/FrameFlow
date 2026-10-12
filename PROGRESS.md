@@ -39,6 +39,12 @@ _Last updated: 2026-10-12 (FrameFlow 2.0 — Editorial Studio)_
     packaged app
 - [x] Docs: README, redesign, comparison, architecture, testing, roadmap and verification.
 
+## Test status (final)
+- Unit tests: 86/86.
+- End-to-end: all 22 functional specs passed. The specs affected by the review fixes were
+  rerun on the final code. Real capture (05) last passed at 18:44 and could not be rerun
+  afterwards because the display was asleep.
+
 ## Known issues and limits
 - Microphone narration is not verified (it needs an OS prompt).
 - Performance numbers in the final run were taken while an unrelated process used ~270% CPU

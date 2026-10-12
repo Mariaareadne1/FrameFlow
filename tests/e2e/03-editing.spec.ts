@@ -11,7 +11,11 @@ const SRC_H = 1200
 async function seek(page: Page, t: number, duration: number): Promise<void> {
   const ruler = page.getByTestId('timeline-ruler')
   const box = (await ruler.boundingBox())!
+  const before = await page.getByTestId('timecode').innerText()
   await ruler.click({ position: { x: (t / duration) * box.width, y: box.height / 2 } })
+  // Let the seek land before acting at the playhead.
+  await expect(page.getByTestId('timecode')).not.toHaveText(before)
+  await page.waitForTimeout(100)
 }
 
 async function previewPixel(page: Page, fx: number, fy: number): Promise<number[]> {

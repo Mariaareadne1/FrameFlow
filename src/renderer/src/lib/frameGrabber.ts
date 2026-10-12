@@ -53,8 +53,22 @@ async function videoFor(path: string): Promise<HTMLVideoElement> {
   current = { path, video }
   const loaded = waitFor(video, 'loadeddata')
   video.src = window.frameflow.media.url(path)
-  await loaded
+  try {
+    await loaded
+  } catch (err) {
+    // Don't keep reusing a video that failed to load.
+    releaseGrabber()
+    throw err
+  }
   return video
+}
+
+/** Frees the hidden video (e.g. when leaving the Studio). Cached thumbnails are kept. */
+export function releaseGrabber(): void {
+  if (!current) return
+  current.video.removeAttribute('src')
+  current.video.load()
+  current = null
 }
 
 export function frameKey(path: string, t: number, width: number): string {

@@ -69,7 +69,8 @@ async function touchRecentNow(path: string, project: Project, thumbnail: string 
     duration: project.media.duration,
     thumbnail: thumbnail ?? previous?.thumbnail ?? null,
     aspectRatio: project.aspectRatio,
-    mediaPath: project.media.path,
+    // Only remember paths the user actually granted (used for the "video missing" badge).
+    mediaPath: isReadable(project.media.path) ? project.media.path : previous?.mediaPath,
   }
   await writeRecents([entry, ...list.filter((r) => r.path !== path)])
 }
@@ -109,6 +110,15 @@ async function backupIfOlderFormat(p: string): Promise<void> {
   }
 }
 
+/** Writes to the same project file are serialized (autosave vs. rename from the gallery). */
+const fileQueues = new Map<string, Promise<unknown>>()
+
+function withFile<T>(p: string, fn: () => Promise<T>): Promise<T> {
+  const next = (fileQueues.get(p) ?? Promise.resolve()).then(fn, fn)
+  fileQueues.set(p, next.catch(() => undefined))
+  return next
+}
+
 async function writeProjectFile(p: string, clean: Project, thumbnail: string | null): Promise<void> {
   await backupIfOlderFormat(p)
   await atomicWrite(p, JSON.stringify(clean, null, 2))
@@ -120,7 +130,7 @@ export async function saveProject(path: string, project: Project, thumbnail: unk
   // Validate before writing so a renderer bug can never persist a corrupt project.
   const clean = parseProject(project)
   if (!isReadable(clean.media.path)) throw new Error('Project references a file that was not granted.')
-  await writeProjectFile(p, clean, validThumbnail(thumbnail))
+  await withFile(p, () => writeProjectFile(p, clean, validThumbnail(thumbnail)))
 }
 
 async function assertRecent(path: string): Promise<string> {
@@ -134,8 +144,11 @@ export async function renameRecent(path: string, name: string): Promise<void> {
   const p = await assertRecent(path)
   const trimmed = name.trim().slice(0, 120)
   if (!trimmed) throw new Error('A project needs a name.')
-  const project = parseProject(JSON.parse(await fs.readFile(p, 'utf8')))
-  await writeProjectFile(p, { ...project, name: trimmed, updatedAt: new Date().toISOString() }, null)
+  await withFile(p, async () => {
+    // Read inside the queue so a pending autosave is never overwritten with stale content.
+    const project = parseProject(JSON.parse(await fs.readFile(p, 'utf8')))
+    await writeProjectFile(p, { ...project, name: trimmed, updatedAt: new Date().toISOString() }, null)
+  })
 }
 
 export async function revealRecent(path: string): Promise<void> {
@@ -240,9 +253,16 @@ export async function chooseAndOpenProject(win: BrowserWindow | null): Promise<O
 export async function listRecents(): Promise<RecentProject[]> {
   const list = await readRecents()
   // Hide entries whose project file disappeared, but keep them on disk (drives can be unplugged).
-  return list
-    .filter((r) => r.path.endsWith(`.${PROJECT_FILE_EXTENSION}`) && existsSync(r.path))
-    .map(({ mediaPath, ...r }) => ({ ...r, mediaMissing: typeof mediaPath === 'string' ? !existsSync(mediaPath) : false }))
+  const exists = (p: string) => fs.access(p).then(() => true, () => false)
+  const checked = await Promise.all(
+    list
+      .filter((r) => r.path.endsWith(`.${PROJECT_FILE_EXTENSION}`))
+      .map(async ({ mediaPath, ...r }) => ({
+        entry: { ...r, mediaMissing: typeof mediaPath === 'string' ? !(await exists(mediaPath)) : false },
+        present: await exists(r.path),
+      })),
+  )
+  return checked.filter((c) => c.present).map((c) => c.entry)
 }
 
 export async function forgetRecent(path: string): Promise<void> {

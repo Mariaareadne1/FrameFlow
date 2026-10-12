@@ -10,7 +10,7 @@ function useThrottledTime(ms: number): number {
   useEffect(() => {
     let last = 0
     let timer: number | null = null
-    return usePlayhead.subscribe((s) => {
+    const unsubscribe = usePlayhead.subscribe((s) => {
       const now = performance.now()
       if (now - last >= ms) {
         last = now
@@ -23,6 +23,10 @@ function useThrottledTime(ms: number): number {
         }, ms)
       }
     })
+    return () => {
+      unsubscribe()
+      if (timer !== null) window.clearTimeout(timer)
+    }
   }, [ms])
   return t
 }
@@ -34,6 +38,19 @@ function useThrottledTime(ms: number): number {
 export function LiveFrame({ project, track, width, className, testId }: { project: Project; track: CursorTrack | null; width: number; className?: string; testId?: string }) {
   const ref = useRef<HTMLCanvasElement>(null)
   const t = useThrottledTime(160)
+  // Seeks finish asynchronously; repaint when the new frame is actually decoded.
+  const [frameTick, setFrameTick] = useState(0)
+  useEffect(() => {
+    const video = playback.video()
+    if (!video) return
+    const bump = () => setFrameTick((n) => n + 1)
+    video.addEventListener('seeked', bump)
+    video.addEventListener('loadeddata', bump)
+    return () => {
+      video.removeEventListener('seeked', bump)
+      video.removeEventListener('loadeddata', bump)
+    }
+  }, [])
   const scene = useMemo(() => buildScene(project, track), [project, track])
   const out = outputSize(project.aspectRatio, 1080)
   const dpr = Math.min(2, window.devicePixelRatio || 1)
@@ -48,7 +65,7 @@ export function LiveFrame({ project, track, width, className, testId }: { projec
     const ready = !!video && video.readyState >= 2 && video.videoWidth > 0
     const s = ready ? { ...scene, srcW: video.videoWidth, srcH: video.videoHeight } : scene
     renderFrame(ctx, { width: w, height: h }, s, ready ? video : null, t)
-  }, [scene, t, w, h])
+  }, [scene, t, w, h, frameTick])
 
   return <canvas ref={ref} width={w} height={h} data-testid={testId} className={className} style={{ width, height: (width * out.height) / out.width }} />
 }

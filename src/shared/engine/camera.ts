@@ -110,6 +110,8 @@ function focusPoint(z: ZoomEvent, cameraPath: SmoothPath | null, t: number): Poi
 export const CHAIN_GAP = 0.8
 /** Shortest pan between chained zooms, so distant hand-offs never whip across the frame. */
 export const MIN_HANDOFF = 0.7
+/** The 0.1 value, kept for migrated projects so their camera is unchanged. */
+export const LEGACY_HANDOFF = 0.05
 
 /**
  * Groups sorted zooms into chains of back-to-back events.
@@ -143,14 +145,14 @@ function memberTarget(z: ZoomEvent, cameraPath: SmoothPath | null, t: number): T
 }
 
 /** Scale/focus a chain is aiming at, ignoring the overall in/out envelope. */
-function chainTarget(chain: readonly ZoomEvent[], cameraPath: SmoothPath | null, t: number): Target {
+function chainTarget(chain: readonly ZoomEvent[], cameraPath: SmoothPath | null, t: number, minHandoff: number): Target {
   let lowerBound = -Infinity
   for (let i = 0; i < chain.length - 1; i++) {
     const a = chain[i]!
     const b = chain[i + 1]!
     // Hand-off window: from when A would start leaving to when B would have fully arrived.
     const h0 = Math.max(lowerBound, Math.min(a.end - rampDuration(a), b.start))
-    const h1 = Math.max(h0 + MIN_HANDOFF, Math.max(a.end, b.start + rampDuration(b)))
+    const h1 = Math.max(h0 + minHandoff, Math.max(a.end, b.start + rampDuration(b)))
     if (t < h0) return memberTarget(a, cameraPath, t)
     if (t <= h1) {
       const k = ease(b.easing, (t - h0) / (h1 - h0))
@@ -182,11 +184,11 @@ function chainEnvelope(chain: readonly ZoomEvent[], t: number): number {
  * `zooms` should already be filtered by `effectiveZooms`. Back-to-back zooms are chained
  * so the camera pans from one to the next instead of zooming out and back in.
  */
-export function cameraAt(zooms: readonly ZoomEvent[], cameraPath: SmoothPath | null, t: number): Camera {
+export function cameraAt(zooms: readonly ZoomEvent[], cameraPath: SmoothPath | null, t: number, minHandoff = MIN_HANDOFF): Camera {
   for (const chain of buildChains(zooms)) {
     const w = chainEnvelope(chain, t)
     if (w <= 0) continue
-    const target = chainTarget(chain, cameraPath, t)
+    const target = chainTarget(chain, cameraPath, t, minHandoff)
     const scale = 1 + (target.scale - 1) * w
     const cx = 0.5 + (target.x - 0.5) * w
     const cy = 0.5 + (target.y - 0.5) * w
