@@ -8,7 +8,7 @@ import { CaptureController, listSources, openPermissionSettings, screenPermissio
 import { abortExport, beginExport, closeReader, finishExport, openReader, readRange, writeExport } from './fileHandles'
 import { isTestMode, libraryPath, safeName } from './library'
 import { isAppUrl } from './windows'
-import { chooseAndOpenProject, createProjectPath, forgetRecent, listRecents, openProject, readCursorFile, saveProject, saveProjectAs } from './projects'
+import { chooseAndOpenProject, createProjectPath, forgetRecent, listRecents, openProject, readCursorFile, renameRecent, revealRecent, saveProject, saveProjectAs } from './projects'
 
 const exported = new Set<string>()
 
@@ -96,6 +96,8 @@ export function registerIpc(capture: CaptureController, getWindows: () => Browse
   ipc.handle(IPC.projectChooseOpen, (e) => chooseAndOpenProject(windowOf(e)))
   ipc.handle(IPC.projectRecent, () => listRecents())
   ipc.handle(IPC.projectForget, (_e, p: unknown) => forgetRecent(str(p, 'path')))
+  ipc.handle(IPC.projectRename, (_e, p: unknown, name: unknown) => renameRecent(str(p, 'path'), str(name, 'name')))
+  ipc.handle(IPC.projectReveal, (_e, p: unknown) => revealRecent(str(p, 'path')))
   ipc.handle(IPC.projectReadCursor, (_e, p: unknown) => readCursorFile(str(p, 'path')))
 
   ipc.handle(IPC.exportChoose, async (e, name: unknown) => {

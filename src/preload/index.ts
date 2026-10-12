@@ -35,6 +35,8 @@ const api: FrameFlowAPI = {
     chooseAndOpen: () => ipcRenderer.invoke(IPC.projectChooseOpen),
     recent: () => ipcRenderer.invoke(IPC.projectRecent),
     forget: (path) => ipcRenderer.invoke(IPC.projectForget, path),
+    rename: (path, name) => ipcRenderer.invoke(IPC.projectRename, path, name),
+    reveal: (path) => ipcRenderer.invoke(IPC.projectReveal, path),
     readCursor: (path) => ipcRenderer.invoke(IPC.projectReadCursor, path),
   },
   export: {

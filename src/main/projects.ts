@@ -1,7 +1,7 @@
 import { promises as fs, existsSync } from 'node:fs'
 import { dirname, isAbsolute, join, relative } from 'node:path'
-import { app, dialog, BrowserWindow } from 'electron'
-import { PROJECT_FILE_EXTENSION, type Project, type RecentProject } from '@shared/project'
+import { app, dialog, shell, BrowserWindow } from 'electron'
+import { PROJECT_FILE_EXTENSION, PROJECT_FORMAT_VERSION, type Project, type RecentProject } from '@shared/project'
 import { parseProject } from '@shared/projectModel'
 import type { OpenedProject } from '@shared/ipc'
 import { allowProject, allowRead, assertProject, canonical, isReadable, isVideoPath } from './access'
@@ -29,19 +29,22 @@ function recentsFile(): string {
   return join(app.getPath('userData'), 'recent-projects.json')
 }
 
-async function readRecents(): Promise<RecentProject[]> {
+/** What is stored on disk for each recent project (the media path is never sent to the UI). */
+type StoredRecent = RecentProject & { mediaPath?: string }
+
+async function readRecents(): Promise<StoredRecent[]> {
   try {
     const raw = JSON.parse(await fs.readFile(recentsFile(), 'utf8')) as unknown
     if (!Array.isArray(raw)) return []
     return raw.filter(
-      (r): r is RecentProject => !!r && typeof r === 'object' && typeof (r as RecentProject).path === 'string' && typeof (r as RecentProject).name === 'string',
+      (r): r is StoredRecent => !!r && typeof r === 'object' && typeof (r as RecentProject).path === 'string' && typeof (r as RecentProject).name === 'string',
     )
   } catch {
     return []
   }
 }
 
-async function writeRecents(list: RecentProject[]): Promise<void> {
+async function writeRecents(list: StoredRecent[]): Promise<void> {
   await atomicWrite(recentsFile(), JSON.stringify(list.slice(0, MAX_RECENTS), null, 2))
 }
 
@@ -59,12 +62,14 @@ function touchRecent(path: string, project: Project, thumbnail: string | null): 
 async function touchRecentNow(path: string, project: Project, thumbnail: string | null): Promise<void> {
   const list = await readRecents()
   const previous = list.find((r) => r.path === path)
-  const entry: RecentProject = {
+  const entry: StoredRecent = {
     path,
     name: project.name,
     updatedAt: project.updatedAt,
     duration: project.media.duration,
     thumbnail: thumbnail ?? previous?.thumbnail ?? null,
+    aspectRatio: project.aspectRatio,
+    mediaPath: project.media.path,
   }
   await writeRecents([entry, ...list.filter((r) => r.path !== path)])
 }
@@ -88,13 +93,53 @@ export async function createProjectPath(name: string, folder?: string): Promise<
   return path
 }
 
+/**
+ * Before an older-format project is overwritten for the first time, keep a copy of the
+ * original (`<file>.v1.bak`) so a migration can always be undone by hand.
+ */
+async function backupIfOlderFormat(p: string): Promise<void> {
+  try {
+    const existing = JSON.parse(await fs.readFile(p, 'utf8')) as { version?: unknown }
+    const version = typeof existing.version === 'number' ? existing.version : null
+    if (version === null || version >= PROJECT_FORMAT_VERSION) return
+    const backup = `${p}.v${version}.bak`
+    if (!existsSync(backup)) await fs.copyFile(p, backup)
+  } catch {
+    // No existing file (new project) or unreadable: nothing to preserve.
+  }
+}
+
+async function writeProjectFile(p: string, clean: Project, thumbnail: string | null): Promise<void> {
+  await backupIfOlderFormat(p)
+  await atomicWrite(p, JSON.stringify(clean, null, 2))
+  await touchRecent(p, clean, thumbnail)
+}
+
 export async function saveProject(path: string, project: Project, thumbnail: unknown): Promise<void> {
   const p = assertProject(path)
   // Validate before writing so a renderer bug can never persist a corrupt project.
   const clean = parseProject(project)
   if (!isReadable(clean.media.path)) throw new Error('Project references a file that was not granted.')
-  await atomicWrite(p, JSON.stringify(clean, null, 2))
-  await touchRecent(p, clean, validThumbnail(thumbnail))
+  await writeProjectFile(p, clean, validThumbnail(thumbnail))
+}
+
+async function assertRecent(path: string): Promise<string> {
+  const p = canonical(path)
+  if (!(await readRecents()).some((r) => r.path === p)) throw new Error('That project is not in Recents.')
+  return p
+}
+
+/** Renames a recent project (the name inside the file; the file itself is not moved). */
+export async function renameRecent(path: string, name: string): Promise<void> {
+  const p = await assertRecent(path)
+  const trimmed = name.trim().slice(0, 120)
+  if (!trimmed) throw new Error('A project needs a name.')
+  const project = parseProject(JSON.parse(await fs.readFile(p, 'utf8')))
+  await writeProjectFile(p, { ...project, name: trimmed, updatedAt: new Date().toISOString() }, null)
+}
+
+export async function revealRecent(path: string): Promise<void> {
+  shell.showItemInFolder(await assertRecent(path))
 }
 
 export async function saveProjectAs(win: BrowserWindow | null, project: Project, thumbnail: unknown): Promise<string | null> {
@@ -195,7 +240,9 @@ export async function chooseAndOpenProject(win: BrowserWindow | null): Promise<O
 export async function listRecents(): Promise<RecentProject[]> {
   const list = await readRecents()
   // Hide entries whose project file disappeared, but keep them on disk (drives can be unplugged).
-  return list.filter((r) => r.path.endsWith(`.${PROJECT_FILE_EXTENSION}`) && existsSync(r.path))
+  return list
+    .filter((r) => r.path.endsWith(`.${PROJECT_FILE_EXTENSION}`) && existsSync(r.path))
+    .map(({ mediaPath, ...r }) => ({ ...r, mediaMissing: typeof mediaPath === 'string' ? !existsSync(mediaPath) : false }))
 }
 
 export async function forgetRecent(path: string): Promise<void> {
