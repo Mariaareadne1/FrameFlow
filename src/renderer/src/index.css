@@ -1,0 +1,132 @@
+@import "tailwindcss";
+
+@theme {
+  --color-bg: #0b0c0f;
+  --color-panel: #121318;
+  --color-panel-2: #17191f;
+  --color-panel-3: #1e2028;
+  --color-line: rgba(255, 255, 255, 0.07);
+  --color-line-strong: rgba(255, 255, 255, 0.12);
+  --color-fg: #ecedf1;
+  --color-muted: #8d909b;
+  --color-subtle: #5d606b;
+  --color-accent: #7c86ff;
+  --color-accent-strong: #6470ff;
+  --color-accent-soft: rgba(124, 134, 255, 0.14);
+  --color-rec: #ff4f5e;
+  --color-danger: #ff6b6b;
+  --color-success: #3ecf8e;
+  --color-zoom: #8b7bff;
+  --color-trim: #ff8a5c;
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "Inter", "Segoe UI", system-ui, sans-serif;
+  --font-mono: "SF Mono", ui-monospace, Menlo, monospace;
+  --radius-xl: 14px;
+}
+
+:root {
+  color-scheme: dark;
+}
+
+html,
+body,
+#root {
+  height: 100%;
+}
+
+body {
+  margin: 0;
+  background: var(--color-bg);
+  color: var(--color-fg);
+  font-family: var(--font-sans);
+  font-size: 13px;
+  -webkit-font-smoothing: antialiased;
+  user-select: none;
+  overflow: hidden;
+}
+
+/* The HUD window is transparent. */
+body.hud {
+  background: transparent;
+}
+
+input,
+textarea {
+  user-select: text;
+}
+
+:focus-visible {
+  outline: 2px solid var(--color-accent);
+  outline-offset: 2px;
+}
+
+.drag-region {
+  -webkit-app-region: drag;
+}
+.no-drag {
+  -webkit-app-region: no-drag;
+}
+
+/* Range input styled consistently and accessibly. */
+input[type="range"].ff-range {
+  -webkit-appearance: none;
+  appearance: none;
+  width: 100%;
+  height: 18px;
+  background: transparent;
+}
+input[type="range"].ff-range::-webkit-slider-runnable-track {
+  height: 4px;
+  border-radius: 999px;
+  background: linear-gradient(to right, var(--color-accent) var(--fill, 50%), rgba(255, 255, 255, 0.1) var(--fill, 50%));
+}
+input[type="range"].ff-range::-webkit-slider-thumb {
+  -webkit-appearance: none;
+  height: 14px;
+  width: 14px;
+  margin-top: -5px;
+  border-radius: 999px;
+  background: #fff;
+  box-shadow: 0 1px 4px rgba(0, 0, 0, 0.5);
+  transition: transform 120ms ease;
+}
+input[type="range"].ff-range:active::-webkit-slider-thumb {
+  transform: scale(1.15);
+}
+
+::-webkit-scrollbar {
+  width: 10px;
+  height: 10px;
+}
+::-webkit-scrollbar-thumb {
+  background: rgba(255, 255, 255, 0.08);
+  border-radius: 999px;
+  border: 3px solid transparent;
+  background-clip: padding-box;
+}
+
+@keyframes ff-fade-in {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+.ff-fade-in {
+  animation: ff-fade-in 220ms ease-out both;
+}
+
+@keyframes ff-pulse {
+  0%,
+  100% {
+    opacity: 1;
+  }
+  50% {
+    opacity: 0.35;
+  }
+}
+.ff-pulse {
+  animation: ff-pulse 1.4s ease-in-out infinite;
+}

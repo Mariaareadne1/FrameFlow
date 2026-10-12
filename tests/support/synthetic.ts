@@ -1,4 +1,4 @@
-import type { CursorTrack } from '../../src/shared/project'
+import type { CursorTrack } from '../../src/shared/project.ts'
 
 export interface ScriptStep {
   /** Time the cursor arrives at the target. */
