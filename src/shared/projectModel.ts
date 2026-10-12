@@ -25,6 +25,9 @@ export function newId(prefix: string): string {
   return `${prefix}-${rnd}`
 }
 
+/** Shortest cut the editor keeps alive while its edges are being edited. */
+export const MIN_TRIM_LENGTH = 0.1
+
 export const DEFAULT_EXPORT: ExportSettings = { resolution: 1080, fps: 60, quality: 'high' }
 
 export interface CreateProjectOptions {
@@ -129,7 +132,23 @@ export function addTrim(project: Project, start: number, end: number): Project {
 }
 
 export function updateTrim(project: Project, id: string, patch: Partial<Omit<TrimRange, 'id'>>): Project {
-  const trims = normalizeTrims(project.trims.map((t) => (t.id === id ? { ...t, ...patch } : t)), project.media.duration)
+  const duration = project.media.duration
+  const trims = normalizeTrims(
+    project.trims.map((t) => {
+      if (t.id !== id) return t
+      const length = Math.max(MIN_TRIM_LENGTH, t.end - t.start)
+      let start = clamp(patch.start ?? t.start, 0, duration)
+      let end = clamp(patch.end ?? t.end, 0, duration)
+      // Moving one edge past the other keeps the cut alive instead of collapsing it.
+      if (end - start < MIN_TRIM_LENGTH) {
+        if (patch.start !== undefined && patch.end === undefined) end = Math.min(duration, start + length)
+        else start = Math.max(0, end - length)
+        if (end - start < MIN_TRIM_LENGTH) start = Math.max(0, end - MIN_TRIM_LENGTH)
+      }
+      return { ...t, start, end }
+    }),
+    duration,
+  )
   return { ...project, trims }
 }
 

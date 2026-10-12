@@ -1,5 +1,5 @@
 import { describe, expect, test } from 'vitest'
-import { addManualZoom, addTrim, applyStyle, createProject, parseProject, ProjectValidationError, removeZoom, setAutoZoom, updateZoom } from '@shared/projectModel'
+import { addManualZoom, addTrim, updateTrim, applyStyle, createProject, parseProject, ProjectValidationError, removeZoom, setAutoZoom, updateZoom } from '@shared/projectModel'
 import type { MediaInfo } from '@shared/project'
 import { DEMO_SCRIPT, scriptedTrack } from '../support/synthetic'
 
@@ -76,5 +76,19 @@ describe('project model', () => {
     expect(p.aspectRatio).toBe('16:9')
     expect(p.zooms[0]!.scale).toBe(4)
     expect(p.background.kind).toBe('preset')
+  })
+})
+
+describe('trim editing', () => {
+  test('moving a cut start past its end keeps the cut instead of deleting it', () => {
+    let p = createProject({ name: 'T', media, cursorTrack: null })
+    p = addTrim(p, 0, 2)
+    const id = p.trims[0]!.id
+    const moved = updateTrim(p, id, { start: 2 })
+    expect(moved.trims).toHaveLength(1)
+    expect(moved.trims[0]).toMatchObject({ start: 2, end: 4 })
+    const ended = updateTrim(moved, id, { end: 1 })
+    expect(ended.trims[0]!.end - ended.trims[0]!.start).toBeGreaterThan(0.09)
+    expect(updateTrim(p, id, { start: 29.99 }).trims[0]!.end).toBeLessThanOrEqual(30)
   })
 })
