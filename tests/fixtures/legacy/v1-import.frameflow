@@ -1,0 +1,43 @@
+{
+  "version": 1,
+  "id": "proj-legacy-import",
+  "name": "Legacy import",
+  "createdAt": "2026-10-12T12:00:00.000Z",
+  "updatedAt": "2026-10-12T12:00:00.000Z",
+  "mode": "advanced",
+  "media": {
+    "path": "{{FIXTURES}}/demo-1920x1200.mp4",
+    "width": 1920,
+    "height": 1200,
+    "duration": 30,
+    "hasAudio": false,
+    "cursorPath": null,
+    "cursorEmbedded": true
+  },
+  "style": "clean",
+  "aspectRatio": "16:9",
+  "background": {
+    "kind": "solid",
+    "color": "#2563eb"
+  },
+  "frame": {
+    "padding": 0.08,
+    "radius": 18,
+    "shadow": 0.7,
+    "scale": 1
+  },
+  "cursor": {
+    "visible": false,
+    "size": 1.4,
+    "smoothing": 0.6,
+    "clickEffect": true
+  },
+  "autoZoom": "off",
+  "zooms": [],
+  "trims": [],
+  "export": {
+    "resolution": 1080,
+    "fps": 60,
+    "quality": "high"
+  }
+}

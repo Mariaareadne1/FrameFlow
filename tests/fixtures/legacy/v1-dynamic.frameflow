@@ -1,0 +1,92 @@
+{
+  "version": 1,
+  "id": "proj-legacy-dynamic",
+  "name": "Legacy dynamic",
+  "createdAt": "2026-10-12T12:00:00.000Z",
+  "updatedAt": "2026-10-12T12:00:00.000Z",
+  "mode": "quick",
+  "media": {
+    "path": "{{FIXTURES}}/demo-1920x1200.mp4",
+    "width": 1920,
+    "height": 1200,
+    "duration": 30,
+    "hasAudio": false,
+    "cursorPath": "{{FIXTURES}}/demo-1920x1200.cursor.json",
+    "cursorEmbedded": false
+  },
+  "style": "minimal",
+  "aspectRatio": "9:16",
+  "background": {
+    "kind": "preset",
+    "presetId": "graphite"
+  },
+  "frame": {
+    "padding": 0.045,
+    "radius": 12,
+    "shadow": 0.45,
+    "scale": 1
+  },
+  "cursor": {
+    "visible": true,
+    "size": 1.2,
+    "smoothing": 0.5,
+    "clickEffect": false
+  },
+  "autoZoom": "dynamic",
+  "zooms": [
+    {
+      "id": "auto-0-2650",
+      "start": 2.65,
+      "end": 5.6,
+      "scale": 2,
+      "focus": {
+        "mode": "cursor"
+      },
+      "easing": "smooth",
+      "transition": 0.7,
+      "origin": "auto"
+    },
+    {
+      "id": "auto-1-8650",
+      "start": 8.65,
+      "end": 13.4,
+      "scale": 2,
+      "focus": {
+        "mode": "cursor"
+      },
+      "easing": "smooth",
+      "transition": 0.7,
+      "origin": "auto"
+    },
+    {
+      "id": "auto-2-18650",
+      "start": 18.65,
+      "end": 20.65,
+      "scale": 2,
+      "focus": {
+        "mode": "cursor"
+      },
+      "easing": "smooth",
+      "transition": 0.7,
+      "origin": "auto"
+    },
+    {
+      "id": "auto-3-25483",
+      "start": 25.483,
+      "end": 27.483,
+      "scale": 2,
+      "focus": {
+        "mode": "cursor"
+      },
+      "easing": "smooth",
+      "transition": 0.7,
+      "origin": "auto"
+    }
+  ],
+  "trims": [],
+  "export": {
+    "resolution": 1080,
+    "fps": 60,
+    "quality": "high"
+  }
+}
