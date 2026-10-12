@@ -1,6 +1,6 @@
 import type { ClickEvent, CursorTrack, Project, ZoomEvent } from '@shared/project'
 import { resolveBackground, type BackgroundPreset } from '@shared/styles'
-import { CAMERA_SMOOTH_TIME, buildSmoothPath, cursorSmoothTime, pathAt, type SmoothPath } from '@shared/engine/cursor'
+import { buildCameraPath, buildSmoothPath, cameraSmoothTime, cursorSmoothTime, pathAt, type SmoothPath } from '@shared/engine/cursor'
 import { cameraAt, effectiveZooms, projectToViewport, viewportOf, type Camera } from '@shared/engine/camera'
 import { computeLayout, type FrameLayout, type Size } from '@shared/engine/layout'
 
@@ -22,9 +22,32 @@ export interface RenderScene {
   clicks: ClickEvent[]
 }
 
+/**
+ * Smoothed paths depend only on telemetry and a few numbers, so they are memoized per track:
+ * restyling or editing Moments never recomputes them.
+ */
+const pathCache = new WeakMap<CursorTrack, Map<string, SmoothPath>>()
+
+function cachedPath(track: CursorTrack, key: string, build: () => SmoothPath): SmoothPath {
+  let byKey = pathCache.get(track)
+  if (!byKey) {
+    byKey = new Map()
+    pathCache.set(track, byKey)
+  }
+  const hit = byKey.get(key)
+  if (hit) return hit
+  const path = build()
+  if (byKey.size > 12) byKey.delete(byKey.keys().next().value as string)
+  byKey.set(key, path)
+  return path
+}
+
 export function buildScene(project: Project, track: CursorTrack | null): RenderScene {
   const hasTrack = !!track && track.samples.length > 0
   const duration = project.media.duration
+  const cursorSmooth = cursorSmoothTime(project.cursor.smoothing)
+  const camSmooth = cameraSmoothTime(project.camera.followSmoothing)
+  const deadzone = project.camera.deadzone
   return {
     srcW: project.media.width,
     srcH: project.media.height,
@@ -32,8 +55,8 @@ export function buildScene(project: Project, track: CursorTrack | null): RenderS
     background: resolveBackground(project.background),
     zooms: effectiveZooms(project.zooms),
     cursor: { ...project.cursor, enabled: hasTrack && project.cursor.visible && !project.media.cursorEmbedded },
-    cursorPath: hasTrack ? buildSmoothPath(track.samples, duration, cursorSmoothTime(project.cursor.smoothing)) : null,
-    cameraPath: hasTrack ? buildSmoothPath(track.samples, duration, CAMERA_SMOOTH_TIME) : null,
+    cursorPath: hasTrack ? cachedPath(track, `c:${duration}:${cursorSmooth}`, () => buildSmoothPath(track.samples, duration, cursorSmooth)) : null,
+    cameraPath: hasTrack ? cachedPath(track, `k:${duration}:${camSmooth}:${deadzone}`, () => buildCameraPath(track.samples, duration, camSmooth, deadzone)) : null,
     clicks: hasTrack ? track.clicks : [],
   }
 }
@@ -57,16 +80,90 @@ function paintBackground(ctx: Ctx2D, size: Size, bg: BackgroundPreset): void {
       const g = ctx.createLinearGradient(W / 2 - dx, H / 2 - dy, W / 2 + dx, H / 2 + dy)
       for (const [offset, color] of layer.stops) g.addColorStop(offset, color)
       ctx.fillStyle = g
-    } else {
+    } else if (layer.type === 'radial') {
       const cx = layer.x * W
       const cy = layer.y * H
       const g = ctx.createRadialGradient(cx, cy, 0, cx, cy, layer.radius * diag)
       g.addColorStop(0, layer.color)
-      g.addColorStop(1, 'rgba(0,0,0,0)')
+      g.addColorStop(1, layer.soft ? transparentOf(layer.color) : 'rgba(0,0,0,0)')
       ctx.fillStyle = g
+    } else if (layer.type === 'vignette') {
+      const g = ctx.createRadialGradient(W / 2, H / 2, (layer.inner * diag) / 2, W / 2, H / 2, (layer.outer * diag) / 2)
+      g.addColorStop(0, transparentOf(layer.color))
+      g.addColorStop(1, layer.color)
+      ctx.fillStyle = g
+    } else {
+      paintGrain(ctx, size, layer.amount, layer.seed)
+      continue
     }
     ctx.fillRect(0, 0, W, H)
   }
+}
+
+/** Deterministic PRNG so grain is identical in preview, export and every frame. */
+function mulberry32(seed: number): () => number {
+  let a = seed >>> 0
+  return () => {
+    a = (a + 0x6d2b79f5) >>> 0
+    let t = a
+    t = Math.imul(t ^ (t >>> 15), t | 1)
+    t ^= t + Math.imul(t ^ (t >>> 7), t | 61)
+    return ((t ^ (t >>> 14)) >>> 0) / 4294967296
+  }
+}
+
+const GRAIN_TILE = 160
+const grainTiles = new Map<number, OffscreenCanvas>()
+
+function grainTile(seed: number): OffscreenCanvas {
+  const hit = grainTiles.get(seed)
+  if (hit) return hit
+  const tile = new OffscreenCanvas(GRAIN_TILE, GRAIN_TILE)
+  const tctx = tile.getContext('2d')!
+  const img = tctx.createImageData(GRAIN_TILE, GRAIN_TILE)
+  const rand = mulberry32(seed)
+  for (let i = 0; i < img.data.length; i += 4) {
+    const v = Math.round(rand() * 255)
+    img.data[i] = v
+    img.data[i + 1] = v
+    img.data[i + 2] = v
+    img.data[i + 3] = 255
+  }
+  tctx.putImageData(img, 0, 0)
+  grainTiles.set(seed, tile)
+  return tile
+}
+
+/** Paper grain. Grain size scales with the output so preview and export read the same. */
+function paintGrain(ctx: Ctx2D, size: Size, amount: number, seed: number): void {
+  const pattern = ctx.createPattern(grainTile(seed), 'repeat')
+  if (!pattern) return
+  const unit = Math.min(size.width, size.height) / 1080
+  pattern.setTransform(new DOMMatrix().scaleSelf(1.4 * unit, 1.4 * unit))
+  ctx.save()
+  ctx.globalAlpha = amount
+  ctx.globalCompositeOperation = 'overlay'
+  ctx.fillStyle = pattern
+  ctx.fillRect(0, 0, size.width, size.height)
+  ctx.restore()
+}
+
+/** The same colour with zero alpha, so gradients fade without passing through grey. */
+function transparentOf(color: string): string {
+  const m = /rgba?\(\s*([\d.]+)\s*,\s*([\d.]+)\s*,\s*([\d.]+)/.exec(color)
+  if (m) return `rgba(${m[1]},${m[2]},${m[3]},0)`
+  if (color.startsWith('#')) {
+    const [r, g, b] = hexToRgb(color)
+    return `rgba(${r},${g},${b},0)`
+  }
+  return 'rgba(0,0,0,0)'
+}
+
+function hexToRgb(hex: string): [number, number, number] {
+  const h = hex.replace('#', '')
+  const full = h.length === 3 ? h.split('').map((c) => c + c).join('') : h.slice(0, 6)
+  const n = parseInt(full, 16)
+  return [(n >> 16) & 255, (n >> 8) & 255, n & 255]
 }
 
 function roundRectPath(ctx: Ctx2D, x: number, y: number, w: number, h: number, r: number): void {
@@ -79,7 +176,7 @@ const backdropCache = new Map<string, OffscreenCanvas>()
 const BACKDROP_CACHE_LIMIT = 4
 
 function getBackdrop(size: Size, scene: RenderScene, layout: FrameLayout): OffscreenCanvas {
-  const key = JSON.stringify([size.width, size.height, scene.background, layout.video, layout.radius, layout.shadow])
+  const key = JSON.stringify([size.width, size.height, scene.background, layout.video, layout.radius, layout.shadow, scene.frame.shadowTint ?? null])
   const hit = backdropCache.get(key)
   if (hit) return hit
   const canvas = new OffscreenCanvas(size.width, size.height)
@@ -88,15 +185,16 @@ function getBackdrop(size: Size, scene: RenderScene, layout: FrameLayout): Offsc
   paintBackground(ctx, size, scene.background)
   const { video: v, radius, shadow } = layout
   if (shadow.alpha > 0) {
+    const [r, g, b] = scene.frame.shadowTint ? hexToRgb(scene.frame.shadowTint) : [0, 0, 0]
     ctx.save()
-    ctx.shadowColor = `rgba(0,0,0,${shadow.alpha})`
+    ctx.shadowColor = `rgba(${r},${g},${b},${shadow.alpha})`
     ctx.shadowBlur = shadow.blur
     ctx.shadowOffsetY = shadow.offsetY
     ctx.fillStyle = '#000'
     roundRectPath(ctx, v.x, v.y, v.w, v.h, radius)
     ctx.fill()
     // A tighter contact shadow grounds the frame.
-    ctx.shadowColor = `rgba(0,0,0,${shadow.alpha * 0.6})`
+    ctx.shadowColor = `rgba(${r},${g},${b},${shadow.alpha * 0.6})`
     ctx.shadowBlur = shadow.blur * 0.2
     ctx.shadowOffsetY = shadow.offsetY * 0.2
     ctx.fill()
@@ -132,14 +230,26 @@ function drawCursor(ctx: Ctx2D, x: number, y: number, size: number, press: numbe
 }
 
 const CLICK_EFFECT_DURATION = 0.5
+const SPOTLIGHT_DURATION = 0.9
 
-function drawClicks(ctx: Ctx2D, scene: RenderScene, t: number, toCanvas: (x: number, y: number) => [number, number], size: number): number {
+type ToCanvas = (x: number, y: number) => [number, number]
+
+/** Press amount 0..1 around clicks: the pointer squashes slightly (every treatment). */
+function pressAt(scene: RenderScene, t: number): number {
   let press = 0
   for (const c of scene.clicks) {
     const age = t - c.t
-    if (age < -0.05 || age > CLICK_EFFECT_DURATION) continue
+    if (age < -0.05 || age > 0.15) continue
     press = Math.max(press, age < 0 ? 1 + age / 0.05 : Math.max(0, 1 - age / 0.15))
-    if (!scene.cursor.clickEffect || age < 0) continue
+  }
+  return press
+}
+
+/** Pulse: an expanding, fading ring (the 0.1 ripple; intensity 1 is pixel-identical). */
+function drawPulse(ctx: Ctx2D, scene: RenderScene, t: number, toCanvas: ToCanvas, size: number, intensity: number): void {
+  for (const c of scene.clicks) {
+    const age = t - c.t
+    if (age < 0 || age > CLICK_EFFECT_DURATION) continue
     const k = age / CLICK_EFFECT_DURATION
     const [px, py] = toCanvas(c.x, c.y)
     const eased = 1 - Math.pow(1 - k, 3)
@@ -147,13 +257,67 @@ function drawClicks(ctx: Ctx2D, scene: RenderScene, t: number, toCanvas: (x: num
     ctx.beginPath()
     ctx.arc(px, py, size * (0.25 + 0.9 * eased), 0, Math.PI * 2)
     ctx.lineWidth = Math.max(1, size * 0.08 * (1 - k))
-    ctx.strokeStyle = `rgba(255,255,255,${0.9 * (1 - k)})`
-    ctx.fillStyle = `rgba(120,150,255,${0.25 * (1 - k)})`
+    ctx.strokeStyle = `rgba(255,255,255,${0.9 * (1 - k) * intensity})`
+    ctx.fillStyle = `rgba(120,150,255,${0.25 * (1 - k) * intensity})`
     ctx.fill()
     ctx.stroke()
     ctx.restore()
   }
-  return press
+}
+
+/** Halo: a soft lavender disc under the pointer that swells gently on clicks. */
+function drawHalo(ctx: Ctx2D, scene: RenderScene, t: number, x: number, y: number, size: number, intensity: number): void {
+  let swell = 0
+  for (const c of scene.clicks) {
+    const age = t - c.t
+    if (age < -0.08 || age > 0.45) continue
+    const k = age < 0 ? 1 + age / 0.08 : 1 - age / 0.45
+    swell = Math.max(swell, Math.sin((Math.max(0, k) * Math.PI) / 2))
+  }
+  const r = size * (0.72 + 0.3 * swell)
+  const g = ctx.createRadialGradient(x, y, 0, x, y, r)
+  g.addColorStop(0, `rgba(170,154,207,${(0.42 + 0.18 * swell) * intensity})`)
+  g.addColorStop(0.7, `rgba(170,154,207,${(0.22 + 0.12 * swell) * intensity})`)
+  g.addColorStop(1, 'rgba(170,154,207,0)')
+  ctx.save()
+  ctx.fillStyle = g
+  ctx.beginPath()
+  ctx.arc(x, y, r, 0, Math.PI * 2)
+  ctx.fill()
+  ctx.lineWidth = Math.max(1, size * 0.035)
+  ctx.strokeStyle = `rgba(255,255,255,${0.55 * intensity})`
+  ctx.beginPath()
+  ctx.arc(x, y, r * 0.78, 0, Math.PI * 2)
+  ctx.stroke()
+  ctx.restore()
+}
+
+/**
+ * Spotlight: after a click, gently quiets everything except the area around it. A soft
+ * radial falloff, never a hard mask, and at most a light dimming so content stays readable.
+ */
+function drawSpotlight(ctx: Ctx2D, scene: RenderScene, t: number, toCanvas: ToCanvas, size: number, area: { x: number; y: number; w: number; h: number }, intensity: number): void {
+  for (const c of scene.clicks) {
+    const age = t - c.t
+    if (age < -0.12 || age > SPOTLIGHT_DURATION) continue
+    const env = age < 0 ? 1 + age / 0.12 : age < 0.45 ? 1 : 1 - (age - 0.45) / (SPOTLIGHT_DURATION - 0.45)
+    const e = Math.sin((Math.max(0, Math.min(1, env)) * Math.PI) / 2)
+    const [px, py] = toCanvas(c.x, c.y)
+    const inner = size * 2.2
+    const outer = size * 7
+    const g = ctx.createRadialGradient(px, py, inner, px, py, outer)
+    g.addColorStop(0, 'rgba(12,12,22,0)')
+    g.addColorStop(1, `rgba(12,12,22,${0.3 * intensity * e})`)
+    ctx.save()
+    ctx.fillStyle = g
+    ctx.fillRect(area.x, area.y, area.w, area.h)
+    ctx.lineWidth = Math.max(1, size * 0.04)
+    ctx.strokeStyle = `rgba(255,255,255,${0.35 * intensity * e})`
+    ctx.beginPath()
+    ctx.arc(px, py, inner * 0.9, 0, Math.PI * 2)
+    ctx.stroke()
+    ctx.restore()
+  }
 }
 
 /**
@@ -189,10 +353,24 @@ export function renderFrame(ctx: Ctx2D, size: Size, scene: RenderScene, source: 
     }
     // Cursor size tracks the content: ~2.2% of the source height, magnified by the zoom.
     const size = (v.h / 1) * 0.022 * scene.cursor.size * cam.scale * 1.45
-    const press = drawClicks(ctx, scene, t, toCanvas, size)
+    const intensity = scene.cursor.effectIntensity
     const p = pathAt(scene.cursorPath, t)
     const [cx, cy] = toCanvas(p.x, p.y)
-    drawCursor(ctx, cx, cy, size, press)
+    // Every treatment goes through the same viewport projection as the pointer itself.
+    switch (scene.cursor.effect) {
+      case 'pulse':
+        drawPulse(ctx, scene, t, toCanvas, size, intensity)
+        break
+      case 'halo':
+        drawHalo(ctx, scene, t, cx, cy, size, intensity)
+        break
+      case 'spotlight':
+        drawSpotlight(ctx, scene, t, toCanvas, size, v, intensity)
+        break
+      case 'natural':
+        break
+    }
+    drawCursor(ctx, cx, cy, size, pressAt(scene, t))
   }
   ctx.restore()
 
