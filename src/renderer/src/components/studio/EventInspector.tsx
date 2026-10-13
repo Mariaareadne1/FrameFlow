@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useRef, useState, type PointerEvent as ReactPointerEvent } from 'react'
 import { Crosshair, MousePointer2, Play, Trash2, Undo2, X } from 'lucide-react'
 import type { EasingId, TrimRange, ZoomEvent } from '@shared/project'
-import { removeTrim, removeZoom, updateTrim, updateZoom } from '@shared/projectModel'
+import { MAX_CAPTION, removeTrim, removeZoom, updateTrim, updateZoom } from '@shared/projectModel'
 import { defaultMomentTitle, momentViews } from '@shared/moments'
 import { keptSegments, outputToSource, sourceToOutput } from '@shared/engine/timeline'
 import { useEditor } from '../../state/editorStore'
@@ -36,7 +36,7 @@ function TimeField({ label, value, onChange, min, max }: { label: string; value:
 }
 
 /** Pick the point a fixed-framing Moment centres on, over the raw frame at the playhead. */
-function FocusPicker({ x, y, onChange }: { x: number; y: number; onChange: (x: number, y: number) => void }) {
+function FocusPicker({ x, y, onChange, tone = 'focus', testId = 'focus-picker', hint = 'Click or drag to choose the point the camera frames.' }: { x: number; y: number; onChange: (x: number, y: number) => void; tone?: 'focus' | 'pointer'; testId?: string; hint?: string }) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const time = usePlayhead((s) => s.time)
   const project = useEditor((s) => s.project)
@@ -71,7 +71,7 @@ function FocusPicker({ x, y, onChange }: { x: number; y: number; onChange: (x: n
       <div
         className="relative w-full cursor-crosshair overflow-hidden rounded-[10px] shadow-[inset_0_0_0_1px_rgba(37,38,43,0.08)]"
         style={{ aspectRatio: `${aspect}` }}
-        data-testid="focus-picker"
+        data-testid={testId}
         onPointerDown={(e) => {
           e.currentTarget.setPointerCapture(e.pointerId)
           pick(e)
@@ -79,9 +79,12 @@ function FocusPicker({ x, y, onChange }: { x: number; y: number; onChange: (x: n
         onPointerMove={(e) => e.buttons === 1 && pick(e)}
       >
         <canvas ref={canvasRef} width={480} height={Math.round(480 / aspect)} className="h-full w-full" />
-        <div className="pointer-events-none absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-lavender/40 shadow-[0_0_0_1.5px_var(--color-ink)]" style={{ left: `${x * 100}%`, top: `${y * 100}%` }} />
+        <div
+          className={tone === 'pointer' ? 'pointer-events-none absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-coral/60 shadow-[0_0_0_1.5px_var(--color-coral-ink)]' : 'pointer-events-none absolute h-6 w-6 -translate-x-1/2 -translate-y-1/2 rounded-full border-2 border-white bg-lavender/40 shadow-[0_0_0_1.5px_var(--color-ink)]'}
+          style={{ left: `${x * 100}%`, top: `${y * 100}%` }}
+        />
       </div>
-      <p className="mt-1.5 text-[11.5px] leading-snug text-ink-3">Click or drag to choose the point the camera frames.</p>
+      <p className="mt-1.5 text-[11.5px] leading-snug text-ink-3">{hint}</p>
     </div>
   )
 }
@@ -97,6 +100,9 @@ export function MomentInspector({ zoom }: { zoom: ZoomEvent }) {
   const view = useMemo(() => momentViews(project.zooms, track?.clicks ?? [], project.trims, duration).find((m) => m.id === zoom.id), [project, track, zoom.id, duration])
   const [label, setLabel] = useState(zoom.label ?? '')
   useEffect(() => setLabel(zoom.label ?? ''), [zoom.id, zoom.label])
+  const [caption, setCaption] = useState(zoom.caption ?? '')
+  useEffect(() => setCaption(zoom.caption ?? ''), [zoom.id, zoom.caption])
+  const defaultPointer = zoom.focus.mode === 'fixed' ? { x: zoom.focus.x, y: zoom.focus.y } : { x: 0.5, y: 0.5 }
   const set = (patch: Partial<ZoomEvent>, key?: string) => apply((p) => updateZoom(p, zoom.id, patch), key)
   const outDuration = sourceToOutput(segments, duration)
   const easings: Array<{ value: EasingId; label: string }> = [
@@ -161,6 +167,50 @@ export function MomentInspector({ zoom }: { zoom: ZoomEvent }) {
             <Segmented<EasingId> label="Camera move" value={zoom.easing} onChange={(easing) => set({ easing })} options={easings} />
           </div>
           <Slider label="Transition" value={zoom.transition} min={0.1} max={2} step={0.05} onChange={(transition) => set({ transition }, `zoom-tr-${zoom.id}`)} format={(v) => `${v.toFixed(2)} s`} />
+        </Section>
+        <Section title="Note" description="Shown on screen during this Moment, and exported.">
+          <label className="block">
+            <span className="mb-1 block text-[12.5px] text-ink">Caption</span>
+            <input
+              aria-label="Caption"
+              data-testid="moment-caption"
+              value={caption}
+              maxLength={MAX_CAPTION}
+              placeholder="Add a caption…"
+              onChange={(e) => setCaption(e.target.value)}
+              onBlur={() => {
+                const next = caption.trim()
+                if (next !== (zoom.caption ?? '')) set(next ? { caption: next } : { caption: undefined })
+              }}
+              onKeyDown={(e) => e.key === 'Enter' && e.currentTarget.blur()}
+              className="w-full rounded-[10px] bg-sunk px-3 py-2 text-[13px] text-ink outline-none placeholder:text-ink-3 focus:bg-surface focus:ring-2 focus:ring-lavender"
+            />
+          </label>
+          {zoom.caption && (
+            <Segmented
+              label="Caption position"
+              size="sm"
+              value={zoom.captionPosition ?? 'bottom'}
+              onChange={(captionPosition) => set({ captionPosition })}
+              options={[{ value: 'top', label: 'Top' }, { value: 'bottom', label: 'Bottom' }]}
+            />
+          )}
+          <Toggle
+            label="Arrow"
+            description="Point at something in the recording."
+            checked={!!zoom.pointer}
+            onChange={(on) => set(on ? { pointer: zoom.pointer ?? defaultPointer } : { pointer: undefined })}
+          />
+          {zoom.pointer && (
+            <FocusPicker
+              x={zoom.pointer.x}
+              y={zoom.pointer.y}
+              tone="pointer"
+              testId="pointer-picker"
+              hint="Click or drag to place the arrow’s tip."
+              onChange={(x, y) => set({ pointer: { x, y } }, `zoom-pointer-${zoom.id}`)}
+            />
+          )}
         </Section>
         <Section title="Timing" description="Times on the edited timeline, after cuts.">
           <div className="grid grid-cols-2 gap-2">

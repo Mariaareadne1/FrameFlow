@@ -48,7 +48,8 @@ function MomentCard({ moment, project, scene, selected, onSelect }: { moment: Mo
         <div className="truncate text-[11.5px] text-ink-2">{moment.subtitle}</div>
         <div className="mt-1.5 flex gap-1">
           <Badge tone={moment.status === 'active' ? 'lavender' : moment.status === 'cut' ? 'coral' : 'neutral'}>{moment.treatment}</Badge>
-          {moment.origin === 'manual' && <Badge>Edited</Badge>}
+          {moment.hasNote && <Badge tone="coral">Note</Badge>}
+          {moment.origin === 'manual' && !moment.hasNote && <Badge>Edited</Badge>}
         </div>
       </div>
     </button>

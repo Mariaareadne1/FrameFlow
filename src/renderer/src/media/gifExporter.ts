@@ -3,7 +3,7 @@ import { VideoSampleSink } from 'mediabunny'
 import type { CursorTrack, Project } from '@shared/project'
 import { gifDelays, gifSize } from '@shared/engine/gif'
 import { keptSegments } from '@shared/engine/timeline'
-import { buildScene, renderFrame } from '../engine/render'
+import { buildScene, ensureNoteFont, renderFrame } from '../engine/render'
 import { ExportCancelledError, framePlan, type ExportProgress, type ExportResult } from './exporter'
 import { openInput } from './source'
 
@@ -29,6 +29,7 @@ export async function exportGif(options: {
   const plan = framePlan(segments, fps)
   const delays = gifDelays(plan.count, fps)
 
+  if (project.zooms.some((z) => z.caption)) await ensureNoteFont()
   const media = await openInput(project.media.path)
   let handle: number | null = null
   let finished = false

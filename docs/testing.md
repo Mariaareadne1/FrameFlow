@@ -75,6 +75,7 @@ which does not click) and drives the page with Playwright. It then checks:
 | 12 sound | synthetic recording with system audio (440 Hz) and microphone (660 Hz): default mix, mic muted, system muted, imported 880 Hz track plus a cut, reopen. A silent video gains a voice-over, cut to the video length. Audio is analysed per frequency band in the exported MP4. |
 | 13 real-system-audio (opt-in) | real window capture with system audio while the demo page plays a quiet 523 Hz tone. The tone must be in the recording and the export. |
 | 14 gif | Aura + Focus + Pulse with cuts, exported as GIF: codec gif, 720×406, exactly 75 frames over 5.00 s, loop marker, clean decode, frames within 10/255 of the MP4 at three times, and cancel cleans up |
+| 15 annotations | caption + arrow added in the inspector: caption pill present only during the Moment, coral arrow at the tip predicted by the shared camera engine while zoomed, caption kept with camera off, note survives reopen |
 | 11 legacy-projects | three real 0.1 projects: open unchanged, export compared with frames exported by 0.1, edit → saved as v2 with `.v1.bak`, reopen |
 
 ## How exports are verified

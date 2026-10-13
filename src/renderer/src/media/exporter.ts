@@ -2,7 +2,7 @@ import { AudioSampleSink, AudioSampleSource, CanvasSource, Mp4OutputFormat, Outp
 import type { CursorTrack, Project } from '@shared/project'
 import { outputSize } from '@shared/engine/layout'
 import { keptSegments, outputDuration, outputToSource, type Segment } from '@shared/engine/timeline'
-import { buildScene, renderFrame } from '../engine/render'
+import { buildScene, ensureNoteFont, renderFrame } from '../engine/render'
 import { openInput } from './source'
 import { mixSegments, type MixInput } from './audioMix'
 
@@ -69,6 +69,7 @@ export async function exportProject(options: {
     throw new Error(`This Mac cannot encode H.264 at ${size.width}×${size.height}. Try a lower resolution.`)
   }
 
+  if (project.zooms.some((z) => z.caption)) await ensureNoteFont()
   const media = await openInput(project.media.path)
   const extraInputs: Array<Awaited<ReturnType<typeof openInput>>> = []
   const extraTracks: Array<{ track: InputAudioTrack; gain: number }> = []

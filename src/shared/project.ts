@@ -58,6 +58,11 @@ export interface ZoomEvent {
   label?: string
   /** A disabled Moment is kept in the project but produces no camera movement. */
   disabled?: boolean
+  /** On-screen caption shown during the Moment (frame space, does not zoom). */
+  caption?: string
+  captionPosition?: 'top' | 'bottom'
+  /** Arrow pointing at this source point (normalized; follows the camera). */
+  pointer?: Point
 }
 
 /** A removed section of the source, in source seconds. */

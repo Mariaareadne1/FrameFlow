@@ -1,7 +1,7 @@
 {
   "name": "frameflow",
   "productName": "FrameFlow",
-  "version": "2.2.0",
+  "version": "2.3.0",
   "description": "Record your screen. Get a beautiful demo video automatically.",
   "main": "out/main/index.js",
   "type": "module",

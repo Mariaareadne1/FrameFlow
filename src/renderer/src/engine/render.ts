@@ -21,6 +21,8 @@ export interface RenderScene {
   cameraPath: SmoothPath | null
   clicks: ClickEvent[]
   minHandoff: number
+  /** Moments that carry a caption and/or a pointer arrow. */
+  notes: ZoomEvent[]
 }
 
 /**
@@ -60,6 +62,7 @@ export function buildScene(project: Project, track: CursorTrack | null): RenderS
     cameraPath: hasTrack ? cachedPath(track, `k:${duration}:${camSmooth}:${deadzone}`, () => buildCameraPath(track.samples, duration, camSmooth, deadzone)) : null,
     clicks: hasTrack ? track.clicks : [],
     minHandoff: project.camera.minHandoff,
+    notes: project.zooms.filter((z) => !!z.caption || !!z.pointer),
   }
 }
 
@@ -327,6 +330,158 @@ function drawSpotlight(ctx: Ctx2D, scene: RenderScene, t: number, toCanvas: ToCa
   }
 }
 
+// ---------------------------------------------------------------------------------------
+// Annotations
+
+const NOTE_FADE = 0.3
+const POINTER_DRAW = 0.45
+export const NOTE_FONT_FAMILY = '"Inter Variable", -apple-system, "Helvetica Neue", sans-serif'
+
+function smoothstep(x: number): number {
+  const c = Math.max(0, Math.min(1, x))
+  return c * c * (3 - 2 * c)
+}
+
+/** 0..1 visibility of a note: fades in and out over NOTE_FADE at the Moment's edges. */
+function noteAlpha(z: ZoomEvent, t: number): number {
+  if (t < z.start || t > z.end) return 0
+  return smoothstep(Math.min((t - z.start) / NOTE_FADE, (z.end - t) / NOTE_FADE))
+}
+
+/** A coral arrow drawn onto the footage, aimed from inside the frame toward the target. */
+function drawPointer(ctx: Ctx2D, z: ZoomEvent, t: number, area: { x: number; y: number; w: number; h: number }, toCanvas: ToCanvas): void {
+  if (!z.pointer) return
+  const alpha = noteAlpha(z, t)
+  if (alpha <= 0) return
+  const [tx, ty] = toCanvas(z.pointer.x, z.pointer.y)
+  const short = Math.min(area.w, area.h)
+  const len = 0.16 * short
+  let dx = area.x + area.w / 2 - tx
+  let dy = area.y + area.h / 2 - ty
+  const d = Math.hypot(dx, dy)
+  if (d < len * 0.5) {
+    dx = -1
+    dy = 1
+  }
+  const n = Math.hypot(dx, dy) || 1
+  dx /= n
+  dy /= n
+  const sx = tx + dx * len
+  const sy = ty + dy * len
+  // Gentle curve: control point offset perpendicular to the shaft.
+  const cx = (sx + tx) / 2 - dy * len * 0.28
+  const cy = (sy + ty) / 2 + dx * len * 0.28
+  const progress = smoothstep((t - z.start) / POINTER_DRAW)
+  const steps = 32
+  const pts: Array<[number, number]> = []
+  for (let i = 0; i <= Math.round(steps * progress); i++) {
+    const u = i / steps
+    pts.push([(1 - u) ** 2 * sx + 2 * (1 - u) * u * cx + u * u * tx, (1 - u) ** 2 * sy + 2 * (1 - u) * u * cy + u * u * ty])
+  }
+  if (pts.length < 2) return
+  const width = Math.max(2, 0.009 * short)
+  const path = (p: Ctx2D) => {
+    p.beginPath()
+    p.moveTo(pts[0]![0], pts[0]![1])
+    for (const [x, y] of pts.slice(1)) p.lineTo(x, y)
+  }
+  ctx.save()
+  ctx.globalAlpha = alpha
+  ctx.lineCap = 'round'
+  ctx.lineJoin = 'round'
+  path(ctx)
+  ctx.strokeStyle = 'rgba(255,255,255,0.92)'
+  ctx.lineWidth = width * 2.4
+  ctx.stroke()
+  path(ctx)
+  ctx.strokeStyle = '#D07A64'
+  ctx.lineWidth = width
+  ctx.stroke()
+  if (progress > 0.82) {
+    // Arrowhead along the curve's final tangent.
+    const [ax, ay] = pts[pts.length - 2]!
+    const [bx, by] = pts[pts.length - 1]!
+    const ang = Math.atan2(by - ay, bx - ax)
+    const head = width * 3.4 * smoothstep((progress - 0.82) / 0.18)
+    ctx.beginPath()
+    ctx.moveTo(bx, by)
+    ctx.lineTo(bx - head * Math.cos(ang - 0.45), by - head * Math.sin(ang - 0.45))
+    ctx.lineTo(bx - head * Math.cos(ang + 0.45), by - head * Math.sin(ang + 0.45))
+    ctx.closePath()
+    ctx.lineWidth = width * 1.4
+    ctx.strokeStyle = 'rgba(255,255,255,0.92)'
+    ctx.stroke()
+    ctx.fillStyle = '#D07A64'
+    ctx.fill()
+  }
+  ctx.restore()
+}
+
+/** Makes sure the caption typeface is ready before frames with text are rendered. */
+export async function ensureNoteFont(): Promise<void> {
+  try {
+    await document.fonts.load(`600 40px ${NOTE_FONT_FAMILY}`)
+  } catch {
+    // Falls back to the system font; captions still render.
+  }
+}
+
+/** Splits a caption into at most two lines that fit `maxWidth`. */
+function wrapCaption(ctx: Ctx2D, text: string, maxWidth: number): string[] {
+  if (ctx.measureText(text).width <= maxWidth) return [text]
+  const lines: string[] = []
+  let line = ''
+  for (const w of text.split(' ')) {
+    const next = line ? `${line} ${w}` : w
+    if (ctx.measureText(next).width > maxWidth && line) {
+      lines.push(line)
+      line = w
+    } else {
+      line = next
+    }
+  }
+  lines.push(line)
+  if (lines.length <= 2) return lines
+  let second = lines.slice(1).join(' ')
+  while (second.length > 1 && ctx.measureText(`${second}…`).width > maxWidth) second = second.slice(0, -1)
+  return [lines[0]!, `${second.trimEnd()}…`]
+}
+
+/** An ink caption pill in frame space (it does not zoom), rising gently into place. */
+function drawCaption(ctx: Ctx2D, z: ZoomEvent, t: number, layout: FrameLayout, short: number): void {
+  if (!z.caption) return
+  const alpha = noteAlpha(z, t)
+  if (alpha <= 0) return
+  const v = layout.video
+  const fs = Math.max(10, 0.034 * short)
+  ctx.save()
+  ctx.font = `600 ${fs}px ${NOTE_FONT_FAMILY}`
+  const lines = wrapCaption(ctx, z.caption, v.w * 0.78)
+  const lineH = fs * 1.3
+  const textW = Math.max(...lines.map((l) => ctx.measureText(l).width))
+  const padX = fs * 0.75
+  const padY = fs * 0.5
+  const w = textW + padX * 2
+  const h = lines.length * lineH + padY * 2 - (lineH - fs)
+  const x = v.x + (v.w - w) / 2
+  const rise = (1 - alpha) * fs * 0.35
+  const y = z.captionPosition === 'top' ? v.y + v.h * 0.05 + rise : v.y + v.h * 0.95 - h + rise
+  ctx.globalAlpha = alpha
+  ctx.shadowColor = 'rgba(0,0,0,0.25)'
+  ctx.shadowBlur = fs * 0.6
+  ctx.shadowOffsetY = fs * 0.12
+  ctx.fillStyle = 'rgba(37,38,43,0.9)'
+  ctx.beginPath()
+  ctx.roundRect(x, y, w, h, Math.min(h / 2, fs * 0.9))
+  ctx.fill()
+  ctx.shadowColor = 'transparent'
+  ctx.fillStyle = '#F7F5F0'
+  ctx.textAlign = 'center'
+  ctx.textBaseline = 'alphabetic'
+  lines.forEach((l, i) => ctx.fillText(l, v.x + v.w / 2, y + padY + fs * 0.92 + i * lineH))
+  ctx.restore()
+}
+
 /**
  * Draws one output frame.
  * @param source decoded source pixels (video element in preview, VideoFrame in export)
@@ -351,6 +506,13 @@ export function renderFrame(ctx: Ctx2D, size: Size, scene: RenderScene, source: 
     ctx.imageSmoothingEnabled = true
     ctx.imageSmoothingQuality = 'high'
     ctx.drawImage(source, vp.x * scene.srcW, vp.y * scene.srcH, vp.w * scene.srcW, vp.h * scene.srcH, v.x, v.y, v.w, v.h)
+  }
+
+  for (const note of scene.notes) {
+    drawPointer(ctx, note, t, v, (x, y) => {
+      const p = projectToViewport({ x, y }, vp)
+      return [v.x + p.x * v.w, v.y + p.y * v.h]
+    })
   }
 
   if (scene.cursor.enabled && scene.cursorPath) {
@@ -388,5 +550,7 @@ export function renderFrame(ctx: Ctx2D, size: Size, scene: RenderScene, source: 
   ctx.strokeStyle = 'rgba(255,255,255,0.10)'
   ctx.stroke()
   ctx.restore()
+  const short = Math.min(size.width, size.height)
+  for (const note of scene.notes) drawCaption(ctx, note, t, layout, short)
   ctx.restore()
 }

@@ -1,6 +1,16 @@
 # FrameFlow — Progress Log
 
-_Last updated: 2026-10-12 (FrameFlow 2.2 — GIF export)_
+_Last updated: 2026-10-12 (FrameFlow 2.3 — notes on Moments)_
+
+## 2.3 (branch `feat/annotations`, not yet merged to `main`)
+- [x] Captions (top/bottom) and pointer arrows on Moments, in preview, MP4 and GIF.
+- [x] Tests: 96 unit tests pass; e2e 15 annotations passes; typecheck and lint are clean.
+- [ ] **Paused here (2026-10-12).** Still to do: run the full regression on the packaged
+      2.3.0 build (`npm run package && FRAMEFLOW_REAL_CAPTURE=1 npx playwright test`) and
+      record the result in `docs/verification.md`, then fast-forward `main` to
+      `feat/annotations` and push.
+- Next: the permission-gated items (microphone check, webcam), which need a person to
+  approve the macOS prompts.
 
 ## 2.2 (branch `feat/gif-export`, merged to `main`)
 - [x] Animated GIF export (shared renderer, rgb565 per-frame palettes, exact delays, loops,
@@ -71,4 +81,4 @@ _Last updated: 2026-10-12 (FrameFlow 2.2 — GIF export)_
 
 ## Next steps
 1. Verify microphone recording by hand.
-2. Pick from `docs/roadmap.md` › Next: system audio, webcam, annotations, GIF.
+2. Pick from `docs/roadmap.md` › Next: webcam, cursor shapes, free-standing text.

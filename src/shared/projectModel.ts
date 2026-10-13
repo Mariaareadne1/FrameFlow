@@ -30,6 +30,9 @@ export function newId(prefix: string): string {
   return `${prefix}-${rnd}`
 }
 
+/** Longest caption, in characters. */
+export const MAX_CAPTION = 120
+
 /** Shortest cut the editor keeps alive while its edges are being edited. */
 export const MIN_TRIM_LENGTH = 0.1
 
@@ -190,7 +193,19 @@ export function sanitizeZoom(z: ZoomEvent, duration: number): ZoomEvent {
   const start = clamp(Math.min(z.start, z.end), 0, Math.max(0, duration - MIN_ZOOM_DURATION))
   const end = clamp(Math.max(z.end, start + MIN_ZOOM_DURATION), start + MIN_ZOOM_DURATION, duration)
   const focus: ZoomFocus = z.focus.mode === 'fixed' ? { mode: 'fixed', x: clamp(z.focus.x, 0, 1), y: clamp(z.focus.y, 0, 1) } : { mode: 'cursor' }
-  return { ...z, start, end, scale: clamp(z.scale, 1, MAX_ZOOM_SCALE), transition: clamp(z.transition, 0.05, 3), focus }
+  const caption = typeof z.caption === 'string' ? z.caption.replace(/\s+/g, ' ').trim().slice(0, MAX_CAPTION) : undefined
+  const pointer = z.pointer && Number.isFinite(z.pointer.x) && Number.isFinite(z.pointer.y) ? { x: clamp(z.pointer.x, 0, 1), y: clamp(z.pointer.y, 0, 1) } : undefined
+  const { caption: _c, pointer: _p, captionPosition: _cp, ...rest } = z
+  return {
+    ...rest,
+    start,
+    end,
+    scale: clamp(z.scale, 1, MAX_ZOOM_SCALE),
+    transition: clamp(z.transition, 0.05, 3),
+    focus,
+    ...(caption ? { caption, captionPosition: z.captionPosition === 'top' ? 'top' : 'bottom' } : {}),
+    ...(pointer ? { pointer } : {}),
+  }
 }
 
 export function addManualZoom(project: Project, at: number, hasCursor: boolean): { project: Project; zoom: ZoomEvent } {
@@ -312,9 +327,14 @@ function parseZoom(v: unknown, duration: number): ZoomEvent | null {
       easing: oneOf(v.easing, EASING_IDS, 'smooth'),
       transition: num(v.transition, DEFAULT_TRANSITION),
       // A named or disabled Moment is a user edit: never let regeneration discard it.
-      origin: v.origin === 'auto' && !(typeof v.label === 'string' && v.label.trim()) && v.disabled !== true ? 'auto' : 'manual',
+      origin:
+        v.origin === 'auto' && !(typeof v.label === 'string' && v.label.trim()) && v.disabled !== true && !(typeof v.caption === 'string' && v.caption.trim()) && !isObj(v.pointer)
+          ? 'auto'
+          : 'manual',
       ...(typeof v.label === 'string' && v.label.trim() ? { label: v.label.trim().slice(0, 80) } : {}),
       ...(v.disabled === true ? { disabled: true } : {}),
+      ...(typeof v.caption === 'string' ? { caption: v.caption, captionPosition: v.captionPosition === 'top' ? 'top' : 'bottom' } : {}),
+      ...(isObj(v.pointer) ? { pointer: { x: num(v.pointer.x, NaN), y: num(v.pointer.y, NaN) } } : {}),
     },
     duration,
   )

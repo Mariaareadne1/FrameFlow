@@ -1,5 +1,25 @@
 # Verification Record — FrameFlow 2.0 / 2.1
 
+## 2.3 (notes) — 2026-10-12, branch `feat/annotations`
+
+- **Unit tests: 96/96.** These include caption cleaning and the 120-character cap, pointer
+  clamping, clearing a note removing its keys, round-tripping through `parseProject`, and an
+  annotated auto Moment being treated as manual.
+- **15 annotations.** A caption and an arrow were added to a Moment through the inspector and
+  exported at 720p30.
+  - The caption pill's background is dark ink at the middle of the Moment (luma < 90) where
+    the plain export is white (> 200), and identical to the plain export (< 3/255) before
+    the Moment starts.
+  - More than 20 coral pixels lie within 26 px of the arrow tip predicted by the shared
+    camera engine while zoomed (scale > 1.3); none are there in the plain export.
+  - With camera movement turned off the caption is still rendered, and the note survives a
+    reopen.
+- **Test bug found and fixed.** The first version of the check sampled a band across the
+  caption's light text, so the mean luma came out at 142. Looking at the frame showed the
+  pill in the right place; the check now samples the pill's top padding.
+- **Full regression on the packaged 2.3.0 build: not yet run to completion.** The run was
+  paused on 2026-10-12 before it finished.
+
 ## 2.2 (GIF) — 2026-10-12, branch `feat/gif-export`
 
 - **Unit tests: 93/93.** These include the delay error diffusion (exact totals for 10, 15

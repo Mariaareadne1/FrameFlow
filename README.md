@@ -50,6 +50,10 @@ export engine. See [docs/redesign.md](docs/redesign.md).
 - **GIF export (2.2).** Animated, looping GIFs at 480, 720 or 960 px and 10, 15 or 20 fps.
   They render with the same renderer as the MP4, so styles, Moments, cursor and cuts all
   carry over. Frame timing is exact. Output is streamed to disk.
+- **Notes on Moments (2.3).** Give any Moment a short caption (top or bottom) and an
+  optional arrow pointing at something on screen. The arrow is pinned to the footage, so it
+  zooms and pans with the camera; the caption stays put on the frame. Both fade in and out
+  with the Moment and appear in MP4 and GIF exports.
 - **Timeline.** The precision timeline is still there for cuts and exact timing. Moments and
   the timeline are the same data.
 - **Export sheet.** It shows a live preview of the final composition and lets you set aspect
@@ -111,7 +115,7 @@ Build `release/mac-arm64/FrameFlow.app`:
 npm run package
 ```
 
-Also produce `release/FrameFlow-2.2.0-arm64.dmg`:
+Also produce `release/FrameFlow-2.3.0-arm64.dmg`:
 
 ```bash
 npm run dist

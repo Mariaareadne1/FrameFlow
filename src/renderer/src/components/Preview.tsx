@@ -2,7 +2,7 @@ import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } fr
 import type { CursorTrack, Project } from '@shared/project'
 import { outputSize } from '@shared/engine/layout'
 import { keptSegments, playableTime } from '@shared/engine/timeline'
-import { buildScene, renderFrame, type RenderScene } from '../engine/render'
+import { buildScene, ensureNoteFont, renderFrame, type RenderScene } from '../engine/render'
 import { playback, usePlayhead } from '../state/playhead'
 import { setThumbnailProvider } from '../lib/autosave'
 import { SoundSync } from '../lib/soundSync'
@@ -212,6 +212,13 @@ export function Preview({ project, track, className }: Props) {
       playback.register(null)
     }
   }, [draw, project.media.duration])
+
+  // Captions use the bundled Inter; repaint once it is ready.
+  useEffect(() => {
+    void ensureNoteFont().then(() => {
+      if (!usePlayhead.getState().playing) draw(usePlayhead.getState().time)
+    })
+  }, [draw])
 
   // Extra audio tracks and levels follow the project.
   useEffect(() => {

@@ -23,6 +23,8 @@ export interface MomentView {
   visible: number
   status: 'active' | 'disabled' | 'cut'
   treatment: string
+  /** The Moment shows a caption or arrow. */
+  hasNote: boolean
   origin: ZoomEvent['origin']
 }
 
@@ -78,6 +80,7 @@ export function momentViews(zooms: readonly ZoomEvent[], clicks: readonly ClickE
         status,
         treatment,
         origin: z.origin,
+        hasNote: !!z.caption || !!z.pointer,
       }
     })
 }

@@ -1,5 +1,15 @@
 # Roadmap
 
+## Done in 2.3 (notes)
+- Captions and pointer arrows on Moments (`caption`, `captionPosition`, `pointer` on
+  ZoomEvent; additive, so v3 files stay v3 and older files open unchanged).
+  - The arrow is drawn in source space, so it follows zooms and pans; the caption is drawn in
+    frame space and stays legible at any zoom. Both fade with the Moment.
+  - Captions are cleaned (whitespace collapsed, at most 120 characters, two lines). Pointers
+    are clamped to the video. Adding a note marks an auto Moment as manual, so feel changes
+    keep it.
+  - Rendered by the shared renderer, so preview, MP4 and GIF match.
+
 ## Done in 2.2 (GIF)
 - Animated GIF export from the shared renderer.
   - Each frame gets its own 256-colour palette (rgb565). rgb444 visibly banded gradients and
@@ -60,7 +70,7 @@
 1. Verify microphone recording manually, then add a level meter.
 2. Webcam picture-in-picture.
 4. Real cursor shapes (I-beam, pointer).
-5. Text and arrow annotations on Moments.
+5. Free-standing text and shapes (not tied to a Moment); caption styles.
 7. Keyboard shortcut overlay. This needs Input Monitoring permission.
 8. On-device captions.
 9. Developer ID signing, notarization and auto-update.

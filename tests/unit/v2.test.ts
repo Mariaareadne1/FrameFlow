@@ -276,3 +276,32 @@ describe('sound (format v3)', () => {
     expect(s.tracks[0]).toMatchObject({ path: '/a.m4a', gain: 0, kind: 'imported' })
   })
 })
+
+describe('Moment notes (captions and pointers)', () => {
+  test('captions are trimmed, capped and positioned; pointers are clamped; both round-trip', () => {
+    let p = createProject({ name: 'x', media, cursorTrack: track })
+    const id = p.zooms[0]!.id
+    p = updateZoom(p, id, { caption: `  Fill   in the form ${'x'.repeat(200)}`, captionPosition: 'top', pointer: { x: 2, y: -1 } })
+    const z = p.zooms.find((q) => q.id === id)!
+    expect(z.caption!.startsWith('Fill in the form')).toBe(true)
+    expect(z.caption!.length).toBeLessThanOrEqual(120)
+    expect(z.captionPosition).toBe('top')
+    expect(z.pointer).toEqual({ x: 1, y: 0 })
+    expect(parseProject(JSON.parse(JSON.stringify(p))).zooms.find((q) => q.id === id)).toEqual(z)
+  })
+  test('clearing a caption removes it entirely', () => {
+    let p = createProject({ name: 'x', media, cursorTrack: track })
+    const id = p.zooms[0]!.id
+    p = updateZoom(p, id, { caption: 'Hello' })
+    p = updateZoom(p, id, { caption: undefined, pointer: undefined })
+    const z = p.zooms.find((q) => q.id === id)!
+    expect('caption' in z).toBe(false)
+    expect('pointer' in z).toBe(false)
+  })
+  test('annotated automatic Moments load as edits so feel changes keep them', () => {
+    const p = createProject({ name: 'x', media, cursorTrack: track })
+    const raw = JSON.parse(JSON.stringify(p))
+    raw.zooms[0].caption = 'Kept'
+    expect(parseProject(raw).zooms[0]!.origin).toBe('manual')
+  })
+})
