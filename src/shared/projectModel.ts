@@ -9,6 +9,8 @@ import {
   type CursorTrack,
   type EasingId,
   type ExportSettings,
+  type SoundSettings,
+  type SoundTrack,
   type FrameStyle,
   type LegacyAutoZoomLevel,
   type MediaInfo,
@@ -41,8 +43,13 @@ export interface CreateProjectOptions {
   camera?: CameraFeel
   cursorEffect?: CursorEffect
   aspectRatio?: AspectRatio
+  /** A separately recorded microphone file (when system audio was recorded too). */
+  microphonePath?: string | null
   now?: Date
 }
+
+export const AUDIO_EXTENSIONS = ['m4a', 'mp3', 'wav', 'aac', 'caf', 'aiff'] as const
+export const MAX_SOUND_TRACKS = 8
 
 /** Default follow dead zone for new projects; migrated 0.1 projects use 0 (old behaviour). */
 export const DEFAULT_DEADZONE = 0.04
@@ -91,6 +98,10 @@ export function createProject(opts: CreateProjectOptions): Project {
       effectIntensity: 0.8,
     },
     camera,
+    sound: {
+      mainGain: 1,
+      tracks: opts.microphonePath ? [{ id: newId('sound'), kind: 'microphone', label: 'Microphone', path: opts.microphonePath, gain: 1 }] : [],
+    },
     zooms: [],
     trims: [],
     export: { ...DEFAULT_EXPORT },
@@ -143,6 +154,32 @@ export function tuneCamera(project: Project, patch: Partial<Omit<CameraSettings,
     camera: clean,
     zooms: regenerate ? regenerateAutoZooms(project.zooms, track, project.media.duration, clean.feel, tuningOf(clean)) : project.zooms,
   }
+}
+
+export function setMainGain(project: Project, gain: number): Project {
+  return { ...project, sound: { ...project.sound, mainGain: clamp(gain, 0, 2) } }
+}
+
+export function addSoundTrack(project: Project, path: string, label: string): { project: Project; track: SoundTrack } {
+  if (project.sound.tracks.length >= MAX_SOUND_TRACKS) throw new Error(`A project can have at most ${MAX_SOUND_TRACKS} extra audio tracks.`)
+  const track: SoundTrack = { id: newId('sound'), kind: 'imported', label: label.slice(0, 60) || 'Audio', path, gain: 1 }
+  return { project: { ...project, sound: { ...project.sound, tracks: [...project.sound.tracks, track] } }, track }
+}
+
+export function updateSoundTrack(project: Project, id: string, patch: Partial<Pick<SoundTrack, 'gain' | 'label'>>): Project {
+  return {
+    ...project,
+    sound: {
+      ...project.sound,
+      tracks: project.sound.tracks.map((t) =>
+        t.id === id ? { ...t, ...(patch.gain !== undefined ? { gain: clamp(patch.gain, 0, 2) } : {}), ...(patch.label !== undefined ? { label: patch.label.slice(0, 60) || t.label } : {}) } : t,
+      ),
+    },
+  }
+}
+
+export function removeSoundTrack(project: Project, id: string): Project {
+  return { ...project, sound: { ...project.sound, tracks: project.sound.tracks.filter((t) => t.id !== id) } }
 }
 
 export function setCursorEffect(project: Project, effect: CursorEffect): Project {
@@ -283,6 +320,23 @@ function parseZoom(v: unknown, duration: number): ZoomEvent | null {
   )
 }
 
+function parseSound(raw: Obj, version: number): SoundSettings {
+  // v1/v2 had no extra tracks; the recording's own audio plays at full volume, as before.
+  if (version < 3 || !isObj(raw.sound)) return { mainGain: 1, tracks: [] }
+  const s = raw.sound
+  const tracks: SoundTrack[] = (Array.isArray(s.tracks) ? s.tracks.slice(0, MAX_SOUND_TRACKS) : [])
+    .filter(isObj)
+    .filter((t) => typeof t.path === 'string' && t.path.length > 0 && t.path.length <= 4096)
+    .map((t) => ({
+      id: str(t.id, newId('sound')),
+      kind: t.kind === 'microphone' ? 'microphone' : 'imported',
+      label: str(t.label, 'Audio').slice(0, 60) || 'Audio',
+      path: t.path as string,
+      gain: clamp(num(t.gain, 1), 0, 2),
+    }))
+  return { mainGain: clamp(num(s.mainGain, 1), 0, 2), tracks }
+}
+
 function parseCamera(raw: Obj, version: number): CameraSettings {
   if (version < 2 || !isObj(raw.camera)) {
     // Migration from 0.1: keep the old camera exactly (no dead zone, 0.45 s follow smoothing).
@@ -378,6 +432,7 @@ export function parseProject(raw: unknown): Project {
     frame,
     cursor,
     camera: parseCamera(raw, version),
+    sound: parseSound(raw, version),
     zooms,
     trims,
     export: exportSettings,

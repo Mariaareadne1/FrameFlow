@@ -1,5 +1,19 @@
 # Roadmap
 
+## Done in 2.1 (sound)
+- **System audio** capture. For window recordings it comes from a separate audio-only display
+  stream, so sound from helper processes (Chromium and Electron apps) is captured too.
+  FrameFlow's own sound is excluded.
+- **Microphone with system audio.** When both are on, the microphone is written to its own
+  `microphone.m4a` on the same clock, so it can be mixed independently.
+- **Sound mixing.** Imported audio tracks (m4a, mp3, wav, aac, caf, aiff) with per-track and
+  recording levels from 0 to 200%.
+  - Preview playback goes through Web Audio gains and stays in sync, including across cuts.
+  - Export mixes everything into a single AAC track with a soft limiter, and follows cuts.
+  - With no extra tracks and a 100% level, the recording's audio is passed through untouched.
+- Project format v3, with an additive migration from v2. Untrusted track paths are dropped
+  on open, following the same trust rules as the video.
+
 ## Done in 2.0 (editorial studio)
 - An editorial design system: warm paper, ink, and lavender/coral accents. Instrument Serif
   and Inter are bundled for offline use. There is a new mark and wordmark, motion is gentle,
@@ -35,8 +49,7 @@
 
 ## Next
 1. Verify microphone recording manually, then add a level meter.
-2. Capture system audio and mix it with the microphone.
-3. Webcam picture-in-picture.
+2. Webcam picture-in-picture.
 4. Real cursor shapes (I-beam, pointer).
 5. Text and arrow annotations on Moments.
 6. GIF export.

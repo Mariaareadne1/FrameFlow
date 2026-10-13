@@ -72,6 +72,8 @@ which does not click) and drives the page with Playwright. It then checks:
 | 07 packaged-app | the built `.app` records via its bundled helper and exports; no DevTools |
 | 09 moments | thumbnails decoded and matched to each Moment's time code, seek on select, rename/zoom edits become manual, feel changes keep edits, disable/delete/undo/redo/add, cuts keep source time, cut-out Moments, Timeline drag ↔ Moment sync, export |
 | 10 creative | all five styles exported (720p30) with backdrop colour/grain checks; custom padding across 9:16 and 1:1; Still/Calm/Follow/Focus exports checked against the shared camera engine at 19 instants; Natural/Halo/Spotlight/Pulse checked around a click; **preview vs export parity** |
+| 12 sound | synthetic recording with system audio (440 Hz) and microphone (660 Hz): default mix, mic muted, system muted, imported 880 Hz track plus a cut, reopen. A silent video gains a voice-over, cut to the video length. Audio is analysed per frequency band in the exported MP4. |
+| 13 real-system-audio (opt-in) | real window capture with system audio while the demo page plays a quiet 523 Hz tone. The tone must be in the recording and the export. |
 | 11 legacy-projects | three real 0.1 projects: open unchanged, export compared with frames exported by 0.1, edit → saved as v2 with `.v1.bak`, reopen |
 
 ## How exports are verified

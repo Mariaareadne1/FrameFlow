@@ -43,6 +43,10 @@ export engine. See [docs/redesign.md](docs/redesign.md).
   always survive a feel change.
 - **Cursor personality.** Choose **Natural**, **Halo**, **Spotlight** or **Pulse**. Each is
   rendered into the exported video and stays aligned through zooms and cuts.
+- **Sound (2.1).** Record **system audio** (what your Mac plays) and/or the
+  **microphone**. Add imported audio files such as a voice-over or music, and set levels from
+  0–200%. Everything is mixed into one AAC track in the export, follows your cuts, and plays
+  in sync in the preview.
 - **Timeline.** The precision timeline is still there for cuts and exact timing. Moments and
   the timeline are the same data.
 - **Export sheet.** It shows a live preview of the final composition and lets you set aspect
@@ -56,6 +60,7 @@ export engine. See [docs/redesign.md](docs/redesign.md).
 | ![Design](docs/media/06-design.png) | ![Camera](docs/media/07-camera.png) |
 | ![Cursor](docs/media/08-cursor.png) | ![Timeline](docs/media/09-timeline.png) |
 | ![Gallery](docs/media/13-home-projects.png) | ![Export](docs/media/10-export.png) |
+| ![Sound](docs/media/17-sound.png) | ![Record setup](docs/media/02-record-setup.png) |
 
 The 0.1 interface is preserved in [docs/redesign/before](docs/redesign/before) for
 comparison; see [docs/redesign/comparison.md](docs/redesign/comparison.md).
@@ -66,8 +71,8 @@ comparison; see [docs/redesign/comparison.md](docs/redesign/comparison.md).
   cursor is kept out of the pixels. Cursor and clicks are sampled at 60 Hz on the video's
   clock.
 - An optional countdown, and a floating stop control that is never recorded.
-- Optional microphone recording. This is implemented but not yet verified; see Known
-  limitations.
+- Optional system audio (verified with real capture) and microphone recording. The
+  microphone is implemented but not yet verified on real hardware; see Known limitations.
 - One shared Canvas renderer draws both the preview and the export.
 - Export uses WebCodecs H.264 with AAC audio. It is streamed to disk and renamed into place
   only when complete.
@@ -103,7 +108,7 @@ Build `release/mac-arm64/FrameFlow.app`:
 npm run package
 ```
 
-Also produce `release/FrameFlow-2.0.0-arm64.dmg`:
+Also produce `release/FrameFlow-2.1.0-arm64.dmg`:
 
 ```bash
 npm run dist
@@ -158,7 +163,8 @@ docs/                  Architecture, redesign, testing, roadmap, verification
 - **macOS only.** There is no Windows or Linux capture back-end yet.
 - **Microphone narration is not verified.** The code exists, but testing it requires a
   macOS permission prompt.
-- **No system audio or webcam yet.**
+- **No webcam yet.** Picture-in-picture needs the camera permission and is next on the
+  roadmap.
 - **The cursor is always drawn as an arrow.** Real cursor shapes are not captured.
 - **Imported videos have the cursor baked into their pixels.** Cursor treatments and the
   automatic camera are unavailable for them. Manual Moments work.

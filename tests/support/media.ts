@@ -110,3 +110,11 @@ export function readTimecode(f: RgbFrame, rect: { x: number; y: number; scale: n
   }
   return level(24) + level(120) / 10
 }
+
+/** Mean level (dB) of `file`'s audio in a narrow band around `freq` Hz. Silence ≈ -91 dB. */
+export function bandLevel(file: string, freq: number): number {
+  const r = spawnSync(FFMPEG, ['-hide_banner', '-i', file, '-vn', '-af', `bandpass=f=${freq}:width_type=h:w=30,volumedetect`, '-f', 'null', '-'], { encoding: 'utf8' })
+  const m = /mean_volume:\s*(-?[\d.]+|-inf) dB/.exec(r.stderr ?? '')
+  if (!m) throw new Error(`no audio level for ${file}`)
+  return m[1] === '-inf' ? -120 : Number(m[1])
+}

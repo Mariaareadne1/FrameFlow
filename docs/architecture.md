@@ -90,6 +90,29 @@ pattern and scripted cursor instead of capturing the screen, through the *same* 
 telemetry and process protocol. E2E tests use it so the full recording workflow is testable
 without Screen Recording permission. Real capture is covered separately (see testing.md).
 
+## Sound (2.1)
+
+- **Capture.** `--system-audio` turns on ScreenCaptureKit audio (48 kHz stereo, excluding
+  FrameFlow's own process). Display recordings use the main stream's audio. Window
+  recordings add an audio-only display stream: a window filter only hears that window's
+  process, and Chromium and Electron apps play sound from helper processes. The microphone
+  goes into the recording's AAC track when it is the only source. With system audio on, it
+  goes to `microphone.m4a`, an `AudioFileWriter` whose session starts at the first video
+  frame, so both files share a time origin.
+- **Model.** `project.sound = { mainGain, tracks[] }`. A track is `{ kind:
+  microphone|imported, label, path, gain }`. Tracks start at source time 0 and are cut with
+  the video. Format v3; v1 and v2 load with `{ mainGain: 1, tracks: [] }`.
+- **Preview.** `lib/soundSync.ts` routes the video element and one `<audio>` per track
+  through Web Audio gain nodes, which allows levels above 100%. It keeps tracks within 0.12 s
+  of the video and follows play, pause, seek and cut jumps.
+- **Export.** With no tracks and `mainGain` 1, the kept sections are copied sample-exactly
+  (the 2.0 path). Otherwise `media/audioMix.ts` decodes every source one second at a time
+  over the kept segments. It resamples and up-mixes to 48 kHz stereo, applies gains, sums
+  with a soft limiter, and encodes AAC. Memory use stays bounded.
+- **Trust.** Track paths in a project file are untrusted, like the video path. They must be
+  audio files and pass the same location rules, otherwise they are dropped from the opened
+  copy. Saving requires every track path to be granted.
+
 ## Rendering — one function for preview and export
 
 `src/renderer/src/engine/render.ts → renderFrame(ctx, size, scene, source, t)` draws one

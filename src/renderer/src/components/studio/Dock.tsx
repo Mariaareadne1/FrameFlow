@@ -1,4 +1,4 @@
-import { Clapperboard, Focus, LayoutPanelTop, MousePointer2, Palette } from 'lucide-react'
+import { AudioLines, Clapperboard, Focus, LayoutPanelTop, MousePointer2, Palette } from 'lucide-react'
 import { clsx } from 'clsx'
 import { useLayoutEffect, useRef, useState } from 'react'
 import { useStudio, type StudioSection } from '../../state/studioStore'
@@ -9,6 +9,7 @@ const ITEMS: Array<{ id: StudioSection; label: string; icon: typeof Palette }> =
   { id: 'design', label: 'Design', icon: Palette },
   { id: 'camera', label: 'Camera', icon: Focus },
   { id: 'cursor', label: 'Cursor', icon: MousePointer2 },
+  { id: 'sound', label: 'Sound', icon: AudioLines },
   { id: 'timeline', label: 'Timeline', icon: Clapperboard },
 ]
 

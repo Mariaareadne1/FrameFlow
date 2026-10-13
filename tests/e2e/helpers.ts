@@ -65,7 +65,7 @@ export function copyFixture(dir: string, name: string): string {
 }
 
 /** Opens the Design/Camera/Cursor panel (idempotent). */
-export async function openPanel(page: Page, name: 'design' | 'camera' | 'cursor' | 'timeline' | 'moments'): Promise<void> {
+export async function openPanel(page: Page, name: 'design' | 'camera' | 'cursor' | 'sound' | 'timeline' | 'moments'): Promise<void> {
   const section = await page.getByTestId('studio').getAttribute('data-section')
   const panelOpen = await page.getByTestId(`${name}-panel`).isVisible().catch(() => false)
   if (section === name && (name === 'timeline' || name === 'moments' || panelOpen)) return

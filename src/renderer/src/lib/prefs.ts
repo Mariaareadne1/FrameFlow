@@ -7,6 +7,7 @@ export interface Preferences {
   cursor: CursorEffect
   countdown: number
   microphone: boolean
+  systemAudio: boolean
 }
 
 const KEY = 'frameflow.prefs.v2'
@@ -14,7 +15,7 @@ const LEGACY_KEY = 'frameflow.prefs.v1'
 const STYLES: readonly StyleId[] = ['studio', 'editorial', 'aura', 'canvas', 'midnight']
 const FEELS: readonly CameraFeel[] = ['still', 'calm', 'follow', 'focus']
 const CURSORS: readonly CursorEffect[] = ['natural', 'halo', 'spotlight', 'pulse']
-export const DEFAULT_PREFS: Preferences = { style: 'editorial', camera: 'calm', cursor: 'halo', countdown: 3, microphone: false }
+export const DEFAULT_PREFS: Preferences = { style: 'editorial', camera: 'calm', cursor: 'halo', countdown: 3, microphone: false, systemAudio: false }
 
 function pick<T>(v: unknown, options: readonly T[], fallback: T): T {
   return options.includes(v as T) ? (v as T) : fallback
@@ -33,6 +34,7 @@ export function loadPrefs(): Preferences {
       cursor: pick(src.cursor, CURSORS, DEFAULT_PREFS.cursor),
       countdown: typeof countdown === 'number' ? Math.max(0, Math.min(10, countdown)) : DEFAULT_PREFS.countdown,
       microphone: (src.microphone ?? legacy?.microphone) === true,
+      systemAudio: src.systemAudio === true,
     }
   } catch {
     return DEFAULT_PREFS

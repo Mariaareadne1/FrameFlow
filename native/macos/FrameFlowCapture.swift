@@ -4,7 +4,7 @@
 //   permission                          {"event":"permission","screen":true|false}
 //   list                                {"event":"sources","displays":[...],"windows":[...]}
 //   record --out-dir DIR (--display ID | --window ID) [--fps N] [--max-width PX]
-//          [--exclude-pid PID] [--mic]
+//          [--exclude-pid PID] [--mic] [--system-audio]
 //       emits {"event":"started",...}, periodic {"event":"progress",...}, then
 //       {"event":"stopped","video":...,"cursor":...,"duration":...} or {"event":"error",...}
 //       Recording stops on a "stop" line on stdin, stdin EOF, SIGINT or SIGTERM. The file is
@@ -54,6 +54,7 @@ struct Options {
     var maxWidth = 3840
     var excludePid: pid_t?
     var microphone = false
+    var systemAudio = false
 
     static func parse(_ args: [String]) -> Options {
         var o = Options()
@@ -68,6 +69,7 @@ struct Options {
             case "--max-width": o.maxWidth = max(640, Int(it.next() ?? "") ?? 3840)
             case "--exclude-pid": o.excludePid = it.next().flatMap { Int32($0) }
             case "--mic": o.microphone = true
+            case "--system-audio": o.systemAudio = true
             default: fail("Unknown argument \(arg)", code: "usage")
             }
         }
@@ -314,14 +316,100 @@ final class MovieWriter {
     }
 }
 
+// MARK: - Separate audio file (microphone when system audio is also recorded)
+
+/// Writes one AAC track to an .m4a that shares the video's time origin, so it can be mixed
+/// with the recording later without any offset bookkeeping.
+final class AudioFileWriter {
+    let url: URL
+    private let writer: AVAssetWriter
+    private let input: AVAssetWriterInput
+    private var started = false
+    private(set) var samplesWritten = 0
+    private let queue = DispatchQueue(label: "frameflow.audiowriter")
+
+    init(url: URL) throws {
+        self.url = url
+        try? FileManager.default.removeItem(at: url)
+        writer = try AVAssetWriter(outputURL: url, fileType: .m4a)
+        input = AVAssetWriterInput(mediaType: .audio, outputSettings: [
+            AVFormatIDKey: kAudioFormatMPEG4AAC,
+            AVSampleRateKey: 48_000,
+            AVNumberOfChannelsKey: 2,
+            AVEncoderBitRateKey: 160_000,
+        ])
+        input.expectsMediaDataInRealTime = true
+        guard writer.canAdd(input) else { throw NSError(domain: "FrameFlow", code: 4, userInfo: [NSLocalizedDescriptionKey: "Cannot add audio track"]) }
+        writer.add(input)
+        guard writer.startWriting() else { throw writer.error ?? NSError(domain: "FrameFlow", code: 5, userInfo: [NSLocalizedDescriptionKey: "Cannot start audio writing"]) }
+    }
+
+    /// Appends once the video's first frame time (`origin`) is known; earlier audio is dropped.
+    func append(_ sb: CMSampleBuffer, origin: CMTime?) {
+        queue.sync {
+            guard let origin, writer.status == .writing else { return }
+            if !started {
+                writer.startSession(atSourceTime: origin)
+                started = true
+            }
+            guard CMSampleBufferGetPresentationTimeStamp(sb) >= origin else { return }
+            if input.isReadyForMoreMediaData, input.append(sb) { samplesWritten += 1 }
+        }
+    }
+
+    func finish(completion: @escaping (Bool) -> Void) {
+        queue.sync {
+            guard started, writer.status == .writing else {
+                writer.cancelWriting()
+                completion(false)
+                return
+            }
+            input.markAsFinished()
+            let w = writer
+            writer.finishWriting { completion(w.status == .completed) }
+        }
+    }
+}
+
+/// Builds an interleaved Float32 PCM sample buffer (used by the synthetic source).
+func makePCMBuffer(_ samples: [Float], channels: Int, sampleRate: Double, pts: CMTime) -> CMSampleBuffer? {
+    var asbd = AudioStreamBasicDescription(mSampleRate: sampleRate, mFormatID: kAudioFormatLinearPCM,
+                                           mFormatFlags: kAudioFormatFlagIsFloat | kAudioFormatFlagIsPacked,
+                                           mBytesPerPacket: UInt32(4 * channels), mFramesPerPacket: 1, mBytesPerFrame: UInt32(4 * channels),
+                                           mChannelsPerFrame: UInt32(channels), mBitsPerChannel: 32, mReserved: 0)
+    var format: CMAudioFormatDescription?
+    guard CMAudioFormatDescriptionCreate(allocator: nil, asbd: &asbd, layoutSize: 0, layout: nil, magicCookieSize: 0, magicCookie: nil,
+                                         extensions: nil, formatDescriptionOut: &format) == noErr, let format else { return nil }
+    let bytes = samples.count * 4
+    var block: CMBlockBuffer?
+    guard CMBlockBufferCreateWithMemoryBlock(allocator: nil, memoryBlock: nil, blockLength: bytes, blockAllocator: nil, customBlockSource: nil,
+                                             offsetToData: 0, dataLength: bytes, flags: 0, blockBufferOut: &block) == noErr, let block else { return nil }
+    let ok = samples.withUnsafeBytes { raw in
+        CMBlockBufferReplaceDataBytes(with: raw.baseAddress!, blockBuffer: block, offsetIntoDestination: 0, dataLength: bytes) == noErr
+    }
+    guard ok else { return nil }
+    var sb: CMSampleBuffer?
+    CMAudioSampleBufferCreateReadyWithPacketDescriptions(allocator: nil, dataBuffer: block, formatDescription: format,
+                                                         sampleCount: samples.count / channels, presentationTimeStamp: pts,
+                                                         packetDescriptions: nil, sampleBufferOut: &sb)
+    return sb
+}
+
 // MARK: - Recording session
 
 final class RecordingSession: NSObject, SCStreamOutput, SCStreamDelegate {
     let options: Options
     let videoURL: URL
     let cursorURL: URL
+    let micURL: URL
     var stream: SCStream?
+    /// Audio-only display stream used for system audio when recording a single window
+    /// (a window filter only hears that window's process, which misses helper processes).
+    var audioStream: SCStream?
     var writer: MovieWriter?
+    /// Separate microphone file, used only when system audio is also recorded.
+    var micWriter: AudioFileWriter?
+    var systemAudioOn = false
     var cursor: CursorRecorder?
     var width = 0
     var height = 0
@@ -334,6 +422,7 @@ final class RecordingSession: NSObject, SCStreamOutput, SCStreamDelegate {
         let dir = URL(fileURLWithPath: options.outDir, isDirectory: true)
         videoURL = dir.appendingPathComponent("recording.mp4")
         cursorURL = dir.appendingPathComponent("cursor.json")
+        micURL = dir.appendingPathComponent("microphone.m4a")
     }
 
     func start() async {
@@ -403,10 +492,41 @@ final class RecordingSession: NSObject, SCStreamOutput, SCStreamDelegate {
             config.captureMicrophone = true
             wantsMic = true
         }
+        if options.systemAudio {
+            systemAudioOn = true
+            if options.windowID == nil {
+                config.capturesAudio = true
+                config.sampleRate = 48_000
+                config.channelCount = 2
+                config.excludesCurrentProcessAudio = true
+            }
+        }
 
-        writer = try MovieWriter(url: videoURL, width: width, height: height, fps: options.fps, audio: wantsMic)
+        // System audio goes into the recording; the microphone joins it only when alone.
+        writer = try MovieWriter(url: videoURL, width: width, height: height, fps: options.fps, audio: wantsMic || systemAudioOn)
+        if wantsMic && systemAudioOn { micWriter = try AudioFileWriter(url: micURL) }
         let s = SCStream(filter: filter, configuration: config, delegate: self)
         try s.addStreamOutput(self, type: .screen, sampleHandlerQueue: sampleQueue)
+        if systemAudioOn && options.windowID == nil { try s.addStreamOutput(self, type: .audio, sampleHandlerQueue: sampleQueue) }
+        if systemAudioOn, options.windowID != nil {
+            // Whole-display audio (minus FrameFlow) with a tiny, slow video stream we ignore.
+            let mainID = CGMainDisplayID()
+            if let display = content.displays.first(where: { $0.displayID == mainID }) ?? content.displays.first {
+                let excluded = content.applications.filter { $0.processID == options.excludePid || $0.processID == getpid() }
+                let audioFilter = SCContentFilter(display: display, excludingApplications: excluded, exceptingWindows: [])
+                let audioConfig = SCStreamConfiguration()
+                audioConfig.width = 2
+                audioConfig.height = 2
+                audioConfig.minimumFrameInterval = CMTime(value: 1, timescale: 1)
+                audioConfig.capturesAudio = true
+                audioConfig.sampleRate = 48_000
+                audioConfig.channelCount = 2
+                audioConfig.excludesCurrentProcessAudio = true
+                let a = SCStream(filter: audioFilter, configuration: audioConfig, delegate: self)
+                try a.addStreamOutput(self, type: .audio, sampleHandlerQueue: sampleQueue)
+                audioStream = a
+            }
+        }
         if wantsMic, #available(macOS 15.0, *) {
             try s.addStreamOutput(self, type: .microphone, sampleHandlerQueue: sampleQueue)
         }
@@ -417,12 +537,13 @@ final class RecordingSession: NSObject, SCStreamOutput, SCStreamDelegate {
             cursor = c
         }
         try await s.startCapture()
+        if let a = audioStream { try await a.startCapture() }
         let micEnabled = wantsMic
         await MainActor.run { announceStarted(microphone: micEnabled) }
     }
 
     @MainActor private func announceStarted(microphone: Bool) {
-        emit(["event": "started", "width": width, "height": height, "fps": options.fps, "microphone": microphone, "video": videoURL.path])
+        emit(["event": "started", "width": width, "height": height, "fps": options.fps, "microphone": microphone, "systemAudio": systemAudioOn, "video": videoURL.path])
         progressTimer = Timer.scheduledTimer(withTimeInterval: 1, repeats: true) { [weak self] _ in
             guard let self, let w = self.writer, let first = w.firstPTS else { return }
             emit(["event": "progress", "seconds": max(0, CACurrentMediaTime() - first.seconds), "frames": w.framesWritten])
@@ -437,8 +558,11 @@ final class RecordingSession: NSObject, SCStreamOutput, SCStreamDelegate {
                   let raw = attachments.first?[.status] as? Int,
                   let status = SCFrameStatus(rawValue: raw), status == .complete else { return }
             writer?.appendVideo(sb)
-        default:
+        case .audio:
             writer?.appendAudio(sb)
+        default:
+            // Microphone: its own file when system audio is also recorded.
+            if let mic = micWriter { mic.append(sb, origin: writer?.firstPTS) } else { writer?.appendAudio(sb) }
         }
     }
 
@@ -456,13 +580,45 @@ final class RecordingSession: NSObject, SCStreamOutput, SCStreamDelegate {
     @MainActor private func startSynthetic() throws {
         width = 1920
         height = 1200
-        writer = try MovieWriter(url: videoURL, width: width, height: height, fps: options.fps, audio: false)
+        systemAudioOn = options.systemAudio
+        writer = try MovieWriter(url: videoURL, width: width, height: height, fps: options.fps, audio: options.systemAudio || options.microphone)
+        if options.systemAudio && options.microphone { micWriter = try AudioFileWriter(url: micURL) }
         let c = CursorRecorder(bounds: { CGRect(x: 0, y: 0, width: 1, height: 1) })
         cursor = c
         let interval = 1.0 / Double(options.fps)
         synthTimer = Timer.scheduledTimer(withTimeInterval: interval, repeats: true) { [weak self] _ in self?.synthTick() }
         RunLoop.main.add(synthTimer!, forMode: .common)
-        announceStarted(microphone: false)
+        announceStarted(microphone: options.microphone)
+    }
+
+    // Synthetic audio: a continuous 440 Hz "system" tone and 660 Hz "microphone" tone, generated
+    // sample-accurately from the first video frame so timestamps never overlap or gap.
+    private var synthSystemSamples = 0
+    private var synthMicSamples = 0
+
+    private func synthAudio(now: Double) {
+        guard let origin = writer?.firstPTS else { return }
+        let rate = 48_000.0
+        let target = Int((now - origin.seconds) * rate)
+        func tone(_ written: inout Int, freq: Double, amp: Float, append: (CMSampleBuffer) -> Void) {
+            let count = target - written
+            guard count > 0 else { return }
+            var buf = [Float](repeating: 0, count: count * 2)
+            for i in 0..<count {
+                let v = amp * Float(sin(2 * Double.pi * freq * Double(written + i) / rate))
+                buf[2 * i] = v
+                buf[2 * i + 1] = v
+            }
+            let pts = CMTimeAdd(origin, CMTime(value: CMTimeValue(written), timescale: 48_000))
+            if let sb = makePCMBuffer(buf, channels: 2, sampleRate: rate, pts: pts) { append(sb) }
+            written = target
+        }
+        if options.systemAudio { tone(&synthSystemSamples, freq: 440, amp: 0.25) { self.writer?.appendAudio($0) } }
+        if options.microphone {
+            tone(&synthMicSamples, freq: 660, amp: 0.25) { sb in
+                if let mic = self.micWriter { mic.append(sb, origin: origin) } else { self.writer?.appendAudio(sb) }
+            }
+        }
     }
 
     private func synthTick() {
@@ -477,6 +633,7 @@ final class RecordingSession: NSObject, SCStreamOutput, SCStreamDelegate {
         var sb: CMSampleBuffer?
         CMSampleBufferCreateReadyWithImageBuffer(allocator: nil, imageBuffer: buffer, formatDescription: format, sampleTiming: &timing, sampleBufferOut: &sb)
         if let sb { writer?.appendVideo(sb) }
+        synthAudio(now: now)
         // Scripted cursor: a slow figure-eight with a click every 2 seconds.
         let t = Double(synthFrame) / Double(options.fps)
         let x = 0.5 + 0.35 * sin(t * 0.9)
@@ -528,6 +685,14 @@ final class RecordingSession: NSObject, SCStreamOutput, SCStreamDelegate {
             guard let writer = self.writer else { fail("Recording never started.", code: "capture-failed") }
             writer.finish(end: end) { error in
                 if let error { fail("Could not finalize the recording: \(self.describe(error))", code: "write-failed") }
+                var micPath: Any = NSNull()
+                if let mic = self.micWriter {
+                    let done = DispatchSemaphore(value: 0)
+                    var ok = false
+                    mic.finish { ok = $0; done.signal() }
+                    done.wait()
+                    if ok { micPath = mic.url.path } else { emit(["event": "warning", "message": "The microphone track could not be saved."]) }
+                }
                 let origin = writer.firstPTS?.seconds ?? 0
                 let duration = max(0, writer.lastPTS.seconds - origin)
                 do {
@@ -544,14 +709,23 @@ final class RecordingSession: NSObject, SCStreamOutput, SCStreamDelegate {
                     "height": self.height,
                     "frames": writer.framesWritten,
                     "dropped": writer.framesDropped,
+                    "systemAudio": self.systemAudioOn,
+                    "microphone": micPath,
                 ])
                 exit(0)
             }
         }
-        if let s = stream {
-            s.stopCapture { _ in finalize() }
+        let stopVideo = {
+            if let s = self.stream {
+                s.stopCapture { _ in finalize() }
+            } else {
+                finalize()
+            }
+        }
+        if let a = audioStream {
+            a.stopCapture { _ in stopVideo() }
         } else {
-            finalize()
+            stopVideo()
         }
     }
 }

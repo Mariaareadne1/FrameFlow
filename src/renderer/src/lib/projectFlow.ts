@@ -34,6 +34,7 @@ export async function projectFromRecording(result: RecordingResult, prefs: Prefe
     camera: prefs.camera,
     cursorEffect: prefs.cursor,
     aspectRatio,
+    microphonePath: result.microphonePath,
   })
   const path = await api.project.createPath(name, result.folder)
   await api.project.save(path, project, null)

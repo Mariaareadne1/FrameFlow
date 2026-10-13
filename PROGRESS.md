@@ -1,6 +1,18 @@
 # FrameFlow — Progress Log
 
-_Last updated: 2026-10-12 (FrameFlow 2.0 — Editorial Studio)_
+_Last updated: 2026-10-12 (FrameFlow 2.1 — Sound)_
+
+## 2.1 (branch `feat/sound`, merged to `main`)
+- [x] System audio capture (real capture verified, including window recordings via an
+      audio-only display stream).
+- [x] Microphone as a separate track when system audio is also on.
+- [x] Imported audio tracks with levels, synced preview playback, and a mixed AAC export.
+- [x] Project format v3 (additive migration), Sound panel in the dock, and Sound toggles in
+      record setup.
+- [x] Tests: 90 unit tests, and 25/25 end-to-end tests including 12-sound and
+      13-real-system-audio.
+- Next: verify the microphone by hand (needs a permission prompt), then webcam
+  picture-in-picture (needs camera permission).
 
 ## Branch and state
 - Working branch: `feat/editorial-studio`, which merges into `main` after the full regression

@@ -1,9 +1,10 @@
-import { AudioSampleSink, AudioSampleSource, CanvasSource, Mp4OutputFormat, Output, StreamTarget, VideoSampleSink, canEncodeAudio, canEncodeVideo, type StreamTargetChunk } from 'mediabunny'
+import { AudioSampleSink, AudioSampleSource, CanvasSource, Mp4OutputFormat, Output, StreamTarget, VideoSampleSink, canEncodeAudio, canEncodeVideo, type InputAudioTrack, type StreamTargetChunk } from 'mediabunny'
 import type { CursorTrack, Project } from '@shared/project'
 import { outputSize } from '@shared/engine/layout'
 import { keptSegments, outputDuration, outputToSource, type Segment } from '@shared/engine/timeline'
 import { buildScene, renderFrame } from '../engine/render'
 import { openInput } from './source'
+import { mixSegments, type MixInput } from './audioMix'
 
 export interface ExportProgress {
   phase: 'preparing' | 'rendering' | 'finalizing' | 'done'
@@ -69,6 +70,8 @@ export async function exportProject(options: {
   }
 
   const media = await openInput(project.media.path)
+  const extraInputs: Array<Awaited<ReturnType<typeof openInput>>> = []
+  const extraTracks: Array<{ track: InputAudioTrack; gain: number }> = []
   let handle: number | null = null
   let output: Output | null = null
   let finished = false
@@ -103,8 +106,17 @@ export async function exportProject(options: {
     const videoSource = new CanvasSource(canvas, { codec: 'avc', bitrate, keyFrameInterval: 2 })
     output.addVideoTrack(videoSource, { frameRate: fps })
 
+    // Extra tracks (microphone, imported audio) are opened like the video, by granted path.
+    for (const t of project.sound.tracks) {
+      if (t.gain <= 0) continue
+      const opened = await openInput(t.path)
+      extraInputs.push(opened)
+      const track = await opened.input.getPrimaryAudioTrack()
+      if (track && (await track.canDecode())) extraTracks.push({ track, gain: t.gain })
+    }
+    const mainAudible = !!audioTrack && project.sound.mainGain > 0 && (await audioTrack.canDecode())
     let audioSource: AudioSampleSource | null = null
-    if (audioTrack && (await audioTrack.canDecode()) && (await canEncodeAudio('aac'))) {
+    if ((mainAudible || extraTracks.length > 0) && (await canEncodeAudio('aac'))) {
       audioSource = new AudioSampleSource({ codec: 'aac', bitrate: 160_000 })
       output.addAudioTrack(audioSource)
     }
@@ -143,8 +155,19 @@ export async function exportProject(options: {
     }
     videoSource.close()
 
-    // ---- Audio: copy kept sections, shifted to the output timeline ----
-    if (audioSource && audioTrack) {
+    // ---- Audio ----
+    // Mixing path: extra tracks or a changed main gain.
+    const needsMix = !!audioSource && (extraTracks.length > 0 || project.sound.mainGain !== 1 || !mainAudible)
+    if (audioSource && needsMix) {
+      const inputs: MixInput[] = []
+      if (mainAudible && audioTrack) inputs.push({ sink: new AudioSampleSink(audioTrack), firstTimestamp: await audioTrack.getFirstTimestamp(), gain: project.sound.mainGain })
+      for (const e of extraTracks) inputs.push({ sink: new AudioSampleSink(e.track), firstTimestamp: await e.track.getFirstTimestamp(), gain: e.gain })
+      const target = audioSource
+      await mixSegments({ inputs, segments, signal, isCancelled: () => new ExportCancelledError(), onSample: (sample) => target.add(sample) })
+      audioSource.close()
+    }
+    // Pass-through path (no extra tracks, 100% gain): exact copy of the kept sections.
+    if (audioSource && audioTrack && !needsMix) {
       const audioSink = new AudioSampleSink(audioTrack)
       const audioFirst = await audioTrack.getFirstTimestamp()
       let outOffset = 0
@@ -198,5 +221,6 @@ export async function exportProject(options: {
   } finally {
     if (!finished && handle !== null) await api.export.abort(handle).catch(() => undefined)
     await media.close()
+    for (const e of extraInputs) await e.close().catch(() => undefined)
   }
 }

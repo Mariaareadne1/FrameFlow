@@ -4,7 +4,7 @@ import { app, dialog, shell, BrowserWindow } from 'electron'
 import { PROJECT_FILE_EXTENSION, PROJECT_FORMAT_VERSION, type Project, type RecentProject } from '@shared/project'
 import { parseProject } from '@shared/projectModel'
 import type { OpenedProject } from '@shared/ipc'
-import { allowProject, allowRead, assertProject, canonical, isReadable, isVideoPath } from './access'
+import { allowProject, allowRead, assertProject, canonical, isAudioPath, isReadable, isVideoPath } from './access'
 import { libraryPath, safeName, timestampLabel } from './library'
 
 const MAX_RECENTS = 200
@@ -130,6 +130,7 @@ export async function saveProject(path: string, project: Project, thumbnail: unk
   // Validate before writing so a renderer bug can never persist a corrupt project.
   const clean = parseProject(project)
   if (!isReadable(clean.media.path)) throw new Error('Project references a file that was not granted.')
+  if (clean.sound.tracks.some((t) => !isReadable(t.path))) throw new Error('Project references an audio file that was not granted.')
   await withFile(p, () => writeProjectFile(p, clean, validThumbnail(thumbnail)))
 }
 
@@ -193,8 +194,8 @@ async function realFile(p: string): Promise<string | null> {
  * previously saved/opened by FrameFlow (it is in Recents). Otherwise the user must confirm the
  * video through a file dialog ("Locate Video…").
  */
-async function trustedMediaPath(projectPath: string, mediaPath: string, recents: RecentProject[]): Promise<string | null> {
-  if (!isVideoPath(mediaPath)) return null
+async function trustedMediaPath(projectPath: string, mediaPath: string, recents: RecentProject[], isAllowedType: (p: string) => boolean = isVideoPath): Promise<string | null> {
+  if (!isAllowedType(mediaPath)) return null
   const media = await realFile(mediaPath)
   if (!media) return null
   const projectDir = dirname(projectPath)
@@ -233,8 +234,20 @@ export async function openProject(path: string): Promise<OpenedProject> {
     allowRead(project.media.path)
     if (project.media.cursorPath) cursor = await readTrustedCursor(project.media.cursorPath, media).catch(() => null)
   }
+  // Extra audio tracks follow the same trust rules as the video (audio files only). Untrusted
+  // tracks are dropped from the opened copy; nothing is written until the user saves.
+  const tracks = []
+  for (const t of project.sound.tracks) {
+    const real = await trustedMediaPath(p, t.path, recents, isAudioPath)
+    if (real) {
+      allowRead(real)
+      allowRead(t.path)
+      tracks.push(t)
+    }
+  }
+  const opened = tracks.length === project.sound.tracks.length ? project : { ...project, sound: { ...project.sound, tracks } }
   await touchRecent(p, project, null)
-  return { path: p, project, mediaMissing: !media, cursor }
+  return { path: p, project: opened, mediaMissing: !media, cursor }
 }
 
 export async function chooseAndOpenProject(win: BrowserWindow | null): Promise<OpenedProject | null> {

@@ -3,7 +3,7 @@ import { join } from 'node:path'
 import { app, BrowserWindow, dialog, ipcMain, shell, type IpcMainInvokeEvent } from 'electron'
 import { IPC, type AppInfo, type StartRecordingOptions } from '@shared/ipc'
 import type { Project } from '@shared/project'
-import { VIDEO_EXTENSIONS, allowExport, allowRead, canonical, isReadable } from './access'
+import { AUDIO_EXTENSIONS, VIDEO_EXTENSIONS, allowExport, allowRead, canonical, isReadable } from './access'
 import { CaptureController, listSources, openPermissionSettings, screenPermission } from './capture'
 import { abortExport, beginExport, closeReader, finishExport, openReader, readRange, writeExport } from './fileHandles'
 import { isTestMode, libraryPath, safeName } from './library'
@@ -33,6 +33,7 @@ function parseStartOptions(v: unknown): StartRecordingOptions {
   return {
     source: { type, id: num(o.source?.id, 'source id') },
     microphone: o.microphone === true,
+    systemAudio: o.systemAudio === true,
     countdown: typeof o.countdown === 'number' && Number.isFinite(o.countdown) ? Math.max(0, Math.min(10, Math.round(o.countdown))) : 3,
   }
 }
@@ -80,6 +81,16 @@ export function registerIpc(capture: CaptureController, getWindows: () => Browse
       properties: ['openFile' as const],
       filters: [{ name: 'Videos', extensions: [...VIDEO_EXTENSIONS] }],
     }
+    const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
+    const file = res.filePaths[0]
+    if (res.canceled || !file) return null
+    allowRead(file)
+    return canonical(file)
+  })
+
+  ipc.handle(IPC.mediaChooseAudio, async (e) => {
+    const win = windowOf(e)
+    const opts = { title: 'Add Audio', properties: ['openFile' as const], filters: [{ name: 'Audio', extensions: [...AUDIO_EXTENSIONS] }] }
     const res = win ? await dialog.showOpenDialog(win, opts) : await dialog.showOpenDialog(opts)
     const file = res.filePaths[0]
     if (res.canceled || !file) return null

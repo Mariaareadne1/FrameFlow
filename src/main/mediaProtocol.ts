@@ -3,7 +3,7 @@ import { Readable } from 'node:stream'
 import { extname } from 'node:path'
 import { protocol } from 'electron'
 import { MEDIA_SCHEME, pathFromMediaUrl } from '@shared/ipc'
-import { isReadable, isVideoPath } from './access'
+import { isMediaPath, isReadable } from './access'
 
 const CORS = { 'Access-Control-Allow-Origin': '*' }
 
@@ -13,6 +13,12 @@ const MIME: Record<string, string> = {
   '.mov': 'video/quicktime',
   '.webm': 'video/webm',
   '.mkv': 'video/x-matroska',
+  '.m4a': 'audio/mp4',
+  '.mp3': 'audio/mpeg',
+  '.wav': 'audio/wav',
+  '.aac': 'audio/aac',
+  '.caf': 'audio/x-caf',
+  '.aiff': 'audio/aiff',
 }
 
 /** Must run before app 'ready'. */
@@ -29,7 +35,7 @@ export function registerMediaScheme(): void {
 export function handleMediaScheme(): void {
   protocol.handle(MEDIA_SCHEME, async (request) => {
     const path = pathFromMediaUrl(request.url)
-    if (!path || !isVideoPath(path) || !isReadable(path)) return new Response('Forbidden', { status: 403 })
+    if (!path || !isMediaPath(path) || !isReadable(path)) return new Response('Forbidden', { status: 403 })
     let size: number
     try {
       size = (await fs.stat(path)).size

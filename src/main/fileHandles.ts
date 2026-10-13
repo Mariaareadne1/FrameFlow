@@ -1,6 +1,6 @@
 import { promises as fs } from 'node:fs'
 import type { FileHandle } from 'node:fs/promises'
-import { assertReadable, consumeExportGrant, isVideoPath } from './access'
+import { assertReadable, consumeExportGrant, isMediaPath } from './access'
 
 /** Random-access read handles used by the exporter's demuxer. */
 const readers = new Map<number, FileHandle>()
@@ -12,7 +12,7 @@ const MAX_EXPORT_BYTES = 64 * 1024 * 1024 * 1024
 
 export async function openReader(path: string): Promise<{ handle: number; size: number }> {
   const p = assertReadable(path)
-  if (!isVideoPath(p)) throw new Error('Only video files can be opened.')
+  if (!isMediaPath(p)) throw new Error('Only video and audio files can be opened.')
   const fh = await fs.open(p, 'r')
   const { size } = await fh.stat()
   const handle = nextReader++

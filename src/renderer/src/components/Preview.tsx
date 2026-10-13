@@ -5,6 +5,7 @@ import { keptSegments, playableTime } from '@shared/engine/timeline'
 import { buildScene, renderFrame, type RenderScene } from '../engine/render'
 import { playback, usePlayhead } from '../state/playhead'
 import { setThumbnailProvider } from '../lib/autosave'
+import { SoundSync } from '../lib/soundSync'
 
 /** Preview never renders above this many pixels on its long side; exports render at full size. */
 const MAX_PREVIEW_LONG_SIDE = 1920
@@ -19,6 +20,7 @@ export function Preview({ project, track, className }: Props) {
   const containerRef = useRef<HTMLDivElement>(null)
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const videoRef = useRef<HTMLVideoElement | null>(null)
+  const soundRef = useRef<SoundSync | null>(null)
   const [box, setBox] = useState({ width: 0, height: 0 })
   const [error, setError] = useState<string | null>(null)
   const [ready, setReady] = useState(false)
@@ -89,6 +91,7 @@ export function Preview({ project, track, className }: Props) {
     video.src = window.frameflow.media.url(project.media.path)
     videoRef.current = video
     playback.setVideo(video)
+    soundRef.current = new SoundSync(video)
     const onLoaded = () => {
       setReady(true)
       const start = playableTime(segmentsRef.current, 0)
@@ -111,6 +114,8 @@ export function Preview({ project, track, className }: Props) {
       video.load()
       videoRef.current = null
       playback.setVideo(null)
+      soundRef.current?.dispose()
+      soundRef.current = null
     }
   }, [project.media.path, draw])
 
@@ -125,6 +130,7 @@ export function Preview({ project, track, className }: Props) {
       const jump = playableTime(segmentsRef.current, t)
       if (jump === 'end' || video.ended) {
         video.pause()
+        soundRef.current?.pause()
         usePlayhead.getState().set({ playing: false })
         const last = segmentsRef.current[segmentsRef.current.length - 1]
         t = last ? last.end : t
@@ -134,6 +140,7 @@ export function Preview({ project, track, className }: Props) {
       }
       if (stopAt !== null && t >= stopAt) {
         video.pause()
+        soundRef.current?.pause()
         stopAt = null
         usePlayhead.getState().set({ playing: false, time: t })
         draw(t)
@@ -142,11 +149,13 @@ export function Preview({ project, track, className }: Props) {
       if (typeof jump === 'number') {
         // Skip drawing this tick: the old frame would be shown at the new time. 'seeked' redraws.
         video.currentTime = jump
+        soundRef.current?.seek(jump)
         usePlayhead.getState().set({ time: jump })
         raf = requestAnimationFrame(tick)
         return
       }
       draw(t)
+      soundRef.current?.keepInSync(t)
       usePlayhead.getState().set({ time: t })
       raf = requestAnimationFrame(tick)
     }
@@ -161,6 +170,7 @@ export function Preview({ project, track, className }: Props) {
         } else if (typeof at === 'number') {
           video.currentTime = at
         }
+        soundRef.current?.play(video.currentTime)
         void video.play().then(
           () => {
             usePlayhead.getState().set({ playing: true })
@@ -180,6 +190,7 @@ export function Preview({ project, track, className }: Props) {
       pause: () => {
         stopAt = null
         videoRef.current?.pause()
+        soundRef.current?.pause()
         cancelAnimationFrame(raf)
         usePlayhead.getState().set({ playing: false })
       },
@@ -190,6 +201,7 @@ export function Preview({ project, track, className }: Props) {
         if (!video) return
         const clamped = Math.max(0, Math.min(t, project.media.duration))
         video.currentTime = clamped
+        soundRef.current?.seek(clamped)
         usePlayhead.getState().set({ time: clamped })
         draw(clamped)
       },
@@ -200,6 +212,11 @@ export function Preview({ project, track, className }: Props) {
       playback.register(null)
     }
   }, [draw, project.media.duration])
+
+  // Extra audio tracks and levels follow the project.
+  useEffect(() => {
+    soundRef.current?.update(project.sound, (p) => window.frameflow.media.url(p))
+  }, [project.sound, project.media.path])
 
   // Redraw on any visual change while paused.
   useEffect(() => {

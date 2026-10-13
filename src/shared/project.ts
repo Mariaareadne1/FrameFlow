@@ -13,9 +13,10 @@
 /**
  * v1: FrameFlow 0.1. v2: FrameFlow 2.0 — adds `camera` (replacing `autoZoom`), cursor
  * treatments, Moment labels/disable flags, new style ids and frame shadow tint.
+ * v3: adds `sound` (main track gain + extra tracks: microphone, imported audio).
  * Older files are migrated in `parseProject`; they are never regenerated or reset.
  */
-export const PROJECT_FORMAT_VERSION = 2
+export const PROJECT_FORMAT_VERSION = 3
 export const PROJECT_FILE_EXTENSION = 'frameflow'
 
 export type AspectRatio = '16:9' | '9:16' | '1:1' | '4:3'
@@ -112,6 +113,23 @@ export interface CameraSettings {
   minHandoff: number
 }
 
+/** An extra audio file mixed under the video (e.g. the microphone, or an imported voice-over). */
+export interface SoundTrack {
+  id: string
+  kind: 'microphone' | 'imported'
+  label: string
+  /** Absolute path of the audio file; starts at source time 0 and is trimmed with the video. */
+  path: string
+  /** Linear gain, 0 – 2 (1 = as recorded). */
+  gain: number
+}
+
+export interface SoundSettings {
+  /** Gain of the recording's own audio track (system audio, or the microphone when alone). */
+  mainGain: number
+  tracks: SoundTrack[]
+}
+
 export interface ExportSettings {
   /** Short side of the output in pixels. */
   resolution: 720 | 1080 | 1440 | 2160
@@ -148,6 +166,7 @@ export interface Project {
   frame: FrameStyle
   cursor: CursorStyle
   camera: CameraSettings
+  sound: SoundSettings
   zooms: ZoomEvent[]
   trims: TrimRange[]
   export: ExportSettings

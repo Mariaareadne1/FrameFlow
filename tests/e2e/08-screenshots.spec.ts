@@ -20,6 +20,8 @@ test('product screenshots', async () => {
     await shot('01-home-empty')
 
     await page.getByTestId('record-demo').click()
+    await page.getByTestId('sound-systemAudio').click()
+    await page.getByTestId('sound-microphone').click()
     await page.waitForTimeout(400)
     await shot('02-record-setup')
     await page.getByTestId('start-recording').click()
@@ -48,6 +50,9 @@ test('product screenshots', async () => {
     await page.getByTestId('dock-cursor').click()
     await page.waitForTimeout(500)
     await shot('08-cursor')
+    await page.getByTestId('dock-sound').click()
+    await page.waitForTimeout(900)
+    await shot('17-sound')
     await page.getByTestId('dock-timeline').click()
     await page.waitForTimeout(700)
     await shot('09-timeline')

@@ -19,9 +19,23 @@ export function canonical(p: string): string {
 
 export const VIDEO_EXTENSIONS = ['mp4', 'mov', 'm4v', 'webm', 'mkv'] as const
 
+export const AUDIO_EXTENSIONS = ['m4a', 'mp3', 'wav', 'aac', 'caf', 'aiff'] as const
+
+function extOf(p: string): string {
+  return p.toLowerCase().split('.').pop() ?? ''
+}
+
 export function isVideoPath(p: string): boolean {
-  const ext = p.toLowerCase().split('.').pop() ?? ''
-  return (VIDEO_EXTENSIONS as readonly string[]).includes(ext)
+  return (VIDEO_EXTENSIONS as readonly string[]).includes(extOf(p))
+}
+
+export function isAudioPath(p: string): boolean {
+  return (AUDIO_EXTENSIONS as readonly string[]).includes(extOf(p))
+}
+
+/** Media FrameFlow may stream or decode: videos and audio tracks. */
+export function isMediaPath(p: string): boolean {
+  return isVideoPath(p) || isAudioPath(p)
 }
 
 export function allowRead(p: string): void {

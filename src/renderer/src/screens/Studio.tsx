@@ -12,6 +12,7 @@ import { Dock } from '../components/studio/Dock'
 import { MomentsStrip } from '../components/studio/MomentsStrip'
 import { MomentInspector, TrimInspector } from '../components/studio/EventInspector'
 import { CameraPanel, CursorPanel, DesignPanel } from '../components/studio/Panels'
+import { SoundPanel } from '../components/studio/SoundPanel'
 
 /**
  * The Studio: one screen for every kind of editing. The styled composition is the hero;
@@ -31,7 +32,7 @@ export function Studio() {
 
   const zoom = selection?.kind === 'zoom' ? project.zooms.find((z) => z.id === selection.id) : undefined
   const trim = selection?.kind === 'trim' ? project.trims.find((t) => t.id === selection.id) : undefined
-  const panel = drawer && (section === 'design' || section === 'camera' || section === 'cursor') ? section : null
+  const panel = drawer && (section === 'design' || section === 'camera' || section === 'cursor' || section === 'sound') ? section : null
   const inspector = panel ? null : zoom ? 'moment' : trim && section === 'timeline' ? 'trim' : null
 
   return (
@@ -61,6 +62,7 @@ export function Studio() {
               {panel === 'design' && <DesignPanel project={project} />}
               {panel === 'camera' && <CameraPanel project={project} />}
               {panel === 'cursor' && <CursorPanel project={project} />}
+              {panel === 'sound' && <SoundPanel project={project} />}
               {inspector === 'moment' && zoom && <MomentInspector zoom={zoom} />}
               {inspector === 'trim' && trim && <TrimInspector trim={trim} />}
             </aside>

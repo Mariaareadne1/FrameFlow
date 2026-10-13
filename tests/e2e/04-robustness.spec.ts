@@ -13,7 +13,7 @@ test('permission denied shows guidance instead of recording', async () => {
     await page.screenshot({ path: join(ARTIFACTS, 'permission-denied.png') })
     // Starting anyway via IPC is refused by the main process with a clear message.
     const err = await page.evaluate(() =>
-      window.frameflow.capture.start({ source: { type: 'display', id: 1 }, microphone: false, countdown: 0 }).then(
+      window.frameflow.capture.start({ source: { type: 'display', id: 1 }, microphone: false, systemAudio: false, countdown: 0 }).then(
         () => 'started',
         (e: Error) => e.message,
       ),

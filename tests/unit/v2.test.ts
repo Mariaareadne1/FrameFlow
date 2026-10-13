@@ -5,7 +5,7 @@ import { cameraAt, effectiveZooms } from '@shared/engine/camera'
 import { buildCameraPath, buildSmoothPath, cameraSmoothTime, parseCursorTrack, pathAt } from '@shared/engine/cursor'
 import { applyStyle, createProject, customizeLook, parseProject, setCameraFeel, setCursorEffect, tuneCamera, updateZoom } from '@shared/projectModel'
 import { BACKGROUND_PRESETS, STYLE_PRESETS } from '@shared/styles'
-import type { CameraFeel, MediaInfo, Project } from '@shared/project'
+import { PROJECT_FORMAT_VERSION, type CameraFeel, type MediaInfo, type Project } from '@shared/project'
 import { DEMO_SCRIPT, scriptedTrack } from '../support/synthetic'
 
 const legacy = (name: string) => JSON.parse(readFileSync(`tests/fixtures/legacy/${name}.frameflow`, 'utf8')) as Record<string, unknown>
@@ -16,7 +16,7 @@ describe('v1 → v2 migration', () => {
   test('recording project: edits, look and camera are preserved exactly', () => {
     const raw = legacy('v1-recording')
     const p = parseProject(raw)
-    expect(p.version).toBe(2)
+    expect(p.version).toBe(PROJECT_FORMAT_VERSION)
     expect(p.camera.feel).toBe('calm')
     expect(p.camera.deadzone).toBe(0)
     expect(cameraSmoothTime(p.camera.followSmoothing)).toBeCloseTo(0.45)
@@ -55,7 +55,7 @@ describe('v1 → v2 migration', () => {
   })
 
   test('newer versions are refused, never reset', () => {
-    expect(() => parseProject({ ...legacy('v1-recording'), version: 3 })).toThrow(/newer/)
+    expect(() => parseProject({ ...legacy('v1-recording'), version: PROJECT_FORMAT_VERSION + 1 })).toThrow(/newer/)
   })
 })
 
@@ -240,5 +240,39 @@ describe('review fixes', () => {
     expect(bad.frame.shadowTint).toBeUndefined()
     const ok = parseProject({ ...JSON.parse(JSON.stringify(p)), frame: { ...p.frame, shadowTint: '#abc' } })
     expect(ok.frame.shadowTint).toBe('#abc')
+  })
+})
+
+describe('sound (format v3)', () => {
+  test('v1 and v2 projects migrate to full-volume recording audio and no extra tracks', () => {
+    const p = parseProject(legacy('v1-recording'))
+    expect(p.version).toBe(3)
+    expect(p.sound).toEqual({ mainGain: 1, tracks: [] })
+    const v2 = { ...JSON.parse(JSON.stringify(createProject({ name: 'x', media, cursorTrack: track }))), version: 2 }
+    delete v2.sound
+    expect(parseProject(v2).sound).toEqual({ mainGain: 1, tracks: [] })
+  })
+  test('a separately recorded microphone becomes a track', () => {
+    const p = createProject({ name: 'x', media: { ...media, hasAudio: true }, cursorTrack: track, microphonePath: '/tmp/microphone.m4a' })
+    expect(p.sound.tracks).toEqual([expect.objectContaining({ kind: 'microphone', label: 'Microphone', path: '/tmp/microphone.m4a', gain: 1 })])
+  })
+  test('track operations are clamped and round-trip', async () => {
+    const { addSoundTrack, removeSoundTrack, setMainGain, updateSoundTrack } = await import('@shared/projectModel')
+    let p = createProject({ name: 'x', media, cursorTrack: null })
+    const added = addSoundTrack(p, '/tmp/voice.m4a', 'Voice-over')
+    p = updateSoundTrack(added.project, added.track.id, { gain: 9, label: 'VO' })
+    p = setMainGain(p, -3)
+    expect(p.sound.mainGain).toBe(0)
+    expect(p.sound.tracks[0]).toMatchObject({ gain: 2, label: 'VO', kind: 'imported' })
+    expect(parseProject(JSON.parse(JSON.stringify(p))).sound).toEqual(p.sound)
+    expect(removeSoundTrack(p, added.track.id).sound.tracks).toEqual([])
+  })
+  test('untrusted sound data is sanitized', () => {
+    const p = createProject({ name: 'x', media, cursorTrack: null })
+    const raw = { ...JSON.parse(JSON.stringify(p)), sound: { mainGain: 'loud', tracks: [{ path: '' }, { path: '/a.m4a', gain: -1, kind: 'weird' }, 'x'] } }
+    const s = parseProject(raw).sound
+    expect(s.mainGain).toBe(1)
+    expect(s.tracks).toHaveLength(1)
+    expect(s.tracks[0]).toMatchObject({ path: '/a.m4a', gain: 0, kind: 'imported' })
   })
 })

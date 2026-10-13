@@ -25,6 +25,7 @@ const api: FrameFlowAPI = {
     read: (handle, start, end) => ipcRenderer.invoke(IPC.mediaRead, handle, start, end),
     close: (handle) => ipcRenderer.invoke(IPC.mediaClose, handle),
     chooseVideo: () => ipcRenderer.invoke(IPC.mediaChoose),
+    chooseAudio: () => ipcRenderer.invoke(IPC.mediaChooseAudio),
     exists: (path) => ipcRenderer.invoke(IPC.mediaExists, path),
   },
   project: {

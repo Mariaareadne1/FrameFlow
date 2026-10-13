@@ -39,7 +39,7 @@ test('Quick Demo: record → automatic Moments → export → Timeline → edit 
     await page.waitForTimeout(800)
     await page.screenshot({ path: join(ARTIFACTS, 'quick-demo.png') })
     const project = (await savedProject(page, library)).json
-    expect(project.version).toBe(2)
+    expect(project.version).toBe(3)
     expect(project.media.cursorEmbedded).toBe(false)
     expect(project.camera.feel).toBe('calm')
     expect(project.style).toBe('editorial')

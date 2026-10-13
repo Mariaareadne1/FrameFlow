@@ -1,4 +1,43 @@
-# Verification Record — FrameFlow 2.0
+# Verification Record — FrameFlow 2.0 / 2.1
+
+## 2.1 (Sound) — 2026-10-12, branch `feat/sound`
+
+| Check | Result |
+|---|---|
+| Lint, types | ✅ clean |
+| Unit | ✅ **90 / 90**, including v3 migration, sound operations and sanitizing untrusted sound data |
+| Package | ✅ `FrameFlow-2.1.0-arm64.dmg`; packaged app re-tested (07 ✅) |
+| E2E full run | `FRAMEFLOW_REAL_CAPTURE=1 npx playwright test` → ✅ **25 passed**, 1 skipped (screenshot generator) |
+
+New end-to-end evidence:
+
+- **12 sound.** Audio was analysed per frequency band in the exported MP4s.
+
+  | Export | 440 Hz (system) | 660 Hz (mic) | 880 Hz (imported) |
+  |---|---|---|---|
+  | Default mix | > −32 dB | > −32 dB | |
+  | Microphone at 0 | > −32 dB | ≥ 20 dB below the audible tone and the default mix | |
+  | System audio at 0 | ≥ 20 dB below | > −32 dB | |
+  | With an imported track and a 1–2 s cut | > −32 dB | > −32 dB | > −32 dB |
+
+  - With the cut, the duration matches the video to within ±0.15 s.
+  - After reopening, `sound` is unchanged.
+  - The old pass-through path still carries a video's own AAC.
+  - A silent 1.5 s video plus a 12 s voice-over exports at 1.5 s with the voice-over.
+- **13 real system audio.** This is a real ScreenCaptureKit window capture while the demo
+  page played a quiet 523 Hz tone. The recording measured **−28.3 dB at 523 Hz against
+  −70.3 dB at 1500 Hz**, and the tone survives export.
+- **Bug found and fixed.** The first window recording with system audio was silent
+  (−91 dB). A window filter only hears that window's process, and Chromium and Electron play
+  sound from helper processes. Window recordings now take system audio from an audio-only
+  display stream. A helper-level check with a display capture and `afplay` had already
+  measured −49.6 dB, which isolated the cause.
+- Microphone capture on real hardware is **still not verified**: it needs a permission prompt.
+  The mic *pipeline* (separate file, mixing and levels) is verified through the synthetic
+  source.
+
+---
+
 
 The final runs were on **2026-10-12**: a MacBook Pro (Apple silicon), macOS 26.4.1, Node
 22.21.0, Electron 40.10.6, branch `feat/editorial-studio`. The pre-redesign baseline (all

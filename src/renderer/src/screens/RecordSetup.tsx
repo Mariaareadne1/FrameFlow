@@ -1,5 +1,5 @@
 import { useCallback, useEffect, useState } from 'react'
-import { AppWindow, ArrowLeft, Check, Mic, MicOff, Monitor, RefreshCw, ShieldCheck, Square } from 'lucide-react'
+import { AppWindow, ArrowLeft, Check, Mic, Monitor, RefreshCw, ShieldCheck, Square, Volume2 } from 'lucide-react'
 import { clsx } from 'clsx'
 import type { CaptureEvent, CaptureSource, PermissionState } from '@shared/ipc'
 import { useApp } from '../state/appStore'
@@ -56,7 +56,7 @@ export function RecordSetup() {
     const [type, id] = selected.split(':') as ['display' | 'window', string]
     setStarting(true)
     try {
-      await window.frameflow.capture.start({ source: { type, id: Number(id) }, microphone: prefs.microphone, countdown: prefs.countdown })
+      await window.frameflow.capture.start({ source: { type, id: Number(id) }, microphone: prefs.microphone, systemAudio: prefs.systemAudio, countdown: prefs.countdown })
     } catch (err) {
       toast('error', errorMessage(err))
       setPhase({ name: 'idle' })
@@ -214,16 +214,32 @@ export function RecordSetup() {
             <div className="font-display mt-2 truncate text-[24px] leading-tight">{selectedSource?.name ?? 'Choose a source'}</div>
             <div className="mt-6 space-y-5">
               <div>
-                <div className="mb-2 text-[12.5px] text-ink">Narration</div>
-                <Segmented
-                  label="Microphone"
-                  value={prefs.microphone ? 'on' : 'off'}
-                  onChange={(v) => setPrefs({ microphone: v === 'on' })}
-                  options={[
-                    { value: 'off', label: <><MicOff size={13} /> Silent</> },
-                    { value: 'on', label: <><Mic size={13} /> Microphone</> },
-                  ]}
-                />
+                <div className="mb-2 text-[12.5px] text-ink">Sound</div>
+                <div className="grid grid-cols-2 gap-2" role="group" aria-label="Sound">
+                  {(
+                    [
+                      { key: 'systemAudio', label: 'System audio', hint: 'What your Mac plays', icon: <Volume2 size={15} /> },
+                      { key: 'microphone', label: 'Microphone', hint: 'Your voice', icon: <Mic size={15} /> },
+                    ] as const
+                  ).map((o) => {
+                    const on = prefs[o.key]
+                    return (
+                      <button
+                        key={o.key}
+                        role="switch"
+                        aria-checked={on}
+                        aria-label={o.label}
+                        data-testid={`sound-${o.key}`}
+                        onClick={() => setPrefs({ [o.key]: !on })}
+                        className={clsx('rounded-[12px] p-3 text-left transition', on ? 'bg-ink text-paper' : 'bg-sunk text-ink hover:bg-sunk-2')}
+                      >
+                        {o.icon}
+                        <div className="mt-2 text-[12.5px] font-medium">{o.label}</div>
+                        <div className={clsx('text-[11px]', on ? 'text-paper/70' : 'text-ink-2')}>{on ? 'On' : o.hint}</div>
+                      </button>
+                    )
+                  })}
+                </div>
               </div>
               <div>
                 <div className="mb-2 text-[12.5px] text-ink">Countdown</div>

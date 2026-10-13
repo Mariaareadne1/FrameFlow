@@ -85,3 +85,10 @@ for (const s of specs) {
   }
   console.log(`[fixtures] ${file}`)
 }
+
+// Audio fixture for the Sound tests: 12 s of 880 Hz, as an imported voice-over stand-in.
+const toneFile = join(out, 'tone-880.m4a')
+if (!existsSync(toneFile) || process.argv.includes('--force')) {
+  execFileSync(ffmpeg, ['-y', '-v', 'error', '-f', 'lavfi', '-i', 'sine=frequency=880:sample_rate=48000:duration=12', '-c:a', 'aac', '-b:a', '128k', toneFile], { stdio: 'inherit' })
+  console.log(`[fixtures] ${toneFile}`)
+}

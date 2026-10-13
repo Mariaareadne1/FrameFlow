@@ -142,6 +142,7 @@ export class CaptureController {
     if (options.source.type === 'window') args.push('--window', String(options.source.id))
     else args.push('--display', String(options.source.id))
     if (microphone) args.push('--mic')
+    if (options.systemAudio) args.push('--system-audio')
 
     // The helper gets a minimal environment, not the app's.
     const env: NodeJS.ProcessEnv = { PATH: '/usr/bin:/bin', HOME: process.env.HOME, TMPDIR: process.env.TMPDIR }
@@ -230,8 +231,10 @@ export class CaptureController {
     }
     const videoPath = String(msg.video)
     const cursorPath = typeof msg.cursor === 'string' && existsSync(msg.cursor) ? msg.cursor : null
+    const microphonePath = typeof msg.microphone === 'string' && existsSync(msg.microphone) ? msg.microphone : null
     allowRead(videoPath)
     if (cursorPath) allowRead(cursorPath)
+    if (microphonePath) allowRead(microphonePath)
     const result: RecordingResult = {
       folder: rec.folder,
       videoPath,
@@ -239,7 +242,9 @@ export class CaptureController {
       duration: Number(msg.duration),
       width: Number(msg.width),
       height: Number(msg.height),
-      hasAudio: rec.microphone,
+      hasAudio: rec.microphone || msg.systemAudio === true,
+      hasSystemAudio: msg.systemAudio === true,
+      microphonePath,
     }
     this.restoreMain()
     this.broadcast({ type: 'stopped', result })

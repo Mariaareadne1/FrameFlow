@@ -18,6 +18,8 @@ export interface CaptureSource {
 export interface StartRecordingOptions {
   source: { type: 'display' | 'window'; id: number }
   microphone: boolean
+  /** Record what the Mac plays (ScreenCaptureKit system audio). */
+  systemAudio: boolean
   /** Seconds of countdown shown before capture begins. */
   countdown: number
 }
@@ -30,6 +32,9 @@ export interface RecordingResult {
   width: number
   height: number
   hasAudio: boolean
+  hasSystemAudio: boolean
+  /** Separate microphone file, present when system audio was recorded too. */
+  microphonePath: string | null
 }
 
 export type CaptureEvent =
@@ -83,6 +88,8 @@ export interface FrameFlowAPI {
     close(handle: number): Promise<void>
     /** Asks the user for a video file to import. Returns its path or null. */
     chooseVideo(): Promise<string | null>
+    /** Asks the user for an audio file to add to the mix. Returns its path or null. */
+    chooseAudio(): Promise<string | null>
     exists(path: string): Promise<boolean>
   }
   project: {
@@ -123,6 +130,7 @@ export const IPC = {
   mediaRead: 'media:read',
   mediaClose: 'media:close',
   mediaChoose: 'media:choose',
+  mediaChooseAudio: 'media:choose-audio',
   mediaExists: 'media:exists',
   projectCreatePath: 'project:create-path',
   projectSave: 'project:save',

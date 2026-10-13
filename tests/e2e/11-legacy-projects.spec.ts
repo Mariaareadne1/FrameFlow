@@ -51,7 +51,7 @@ for (const name of ['v1-recording', 'v1-dynamic', 'v1-import'] as const) {
       await page.getByTestId('project-name').fill(`${raw.name} (2.0)`)
       await page.getByTestId('project-name').press('Enter')
       const saved = (await savedProject(page, library)).json
-      expect(saved.version).toBe(2)
+      expect(saved.version).toBe(3)
       expect(saved.zooms).toEqual(raw.zooms)
       expect(saved.trims).toEqual(raw.trims)
       expect(saved.frame).toEqual(raw.frame)
