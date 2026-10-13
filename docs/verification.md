@@ -36,7 +36,8 @@ on the final commit:
 - Spec 03 failed once in that combined run: a test-timing race, where it acted before a ruler
   seek had landed. After hardening the seek helper, 03 passed 2/2 and its editing test passed
   4 more consecutive runs.
-- **Spec 05 (real capture) could not be rerun after the review fixes.** By then the Mac's
+- **Spec 05 (real capture) was rerun later, once the display was awake (21:20): ✅ passed on
+  the final commit (21.2 s).** At first it could not be rerun after the review fixes: By then the Mac's
   display was **asleep**: `CGDisplayIsAsleep` = 1, with no active displays, so ScreenCaptureKit
   had no pixels to capture and the source thumbnails were blank. I did not wake the display.
   - Real capture last passed on the 2.0 build at 18:44 in the full run.
