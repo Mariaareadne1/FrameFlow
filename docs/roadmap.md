@@ -1,5 +1,14 @@
 # Roadmap
 
+## Done in 2.2 (GIF)
+- Animated GIF export from the shared renderer.
+  - Each frame gets its own 256-colour palette (rgb565). rgb444 visibly banded gradients and
+    lost light-grey UI detail, so it was rejected.
+  - Frame delays use error diffusion, so the total duration is exact.
+  - The GIF loops, is written to disk frame by frame, and can be cancelled without leaving
+    files behind.
+  - Width (480/720/960) and fps (10/15/20) are stored in `project.export`.
+
 ## Done in 2.1 (sound)
 - **System audio** capture. For window recordings it comes from a separate audio-only display
   stream, so sound from helper processes (Chromium and Electron apps) is captured too.
@@ -52,7 +61,6 @@
 2. Webcam picture-in-picture.
 4. Real cursor shapes (I-beam, pointer).
 5. Text and arrow annotations on Moments.
-6. GIF export.
 7. Keyboard shortcut overlay. This needs Input Monitoring permission.
 8. On-device captions.
 9. Developer ID signing, notarization and auto-update.

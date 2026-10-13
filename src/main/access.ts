@@ -64,7 +64,7 @@ export function allowExport(p: string): void {
 export function consumeExportGrant(p: string): string {
   const c = canonical(p)
   if (!writableExports.has(c)) throw new Error('Export destination was not chosen by the user.')
-  if (!c.toLowerCase().endsWith('.mp4')) throw new Error('Exports must be .mp4 files.')
+  if (!/\.(mp4|gif)$/i.test(c)) throw new Error('Exports must be .mp4 or .gif files.')
   writableExports.delete(c)
   return c
 }

@@ -47,6 +47,9 @@ export engine. See [docs/redesign.md](docs/redesign.md).
   **microphone**. Add imported audio files such as a voice-over or music, and set levels from
   0–200%. Everything is mixed into one AAC track in the export, follows your cuts, and plays
   in sync in the preview.
+- **GIF export (2.2).** Animated, looping GIFs at 480, 720 or 960 px and 10, 15 or 20 fps.
+  They render with the same renderer as the MP4, so styles, Moments, cursor and cuts all
+  carry over. Frame timing is exact. Output is streamed to disk.
 - **Timeline.** The precision timeline is still there for cuts and exact timing. Moments and
   the timeline are the same data.
 - **Export sheet.** It shows a live preview of the final composition and lets you set aspect
@@ -108,7 +111,7 @@ Build `release/mac-arm64/FrameFlow.app`:
 npm run package
 ```
 
-Also produce `release/FrameFlow-2.1.0-arm64.dmg`:
+Also produce `release/FrameFlow-2.2.0-arm64.dmg`:
 
 ```bash
 npm run dist

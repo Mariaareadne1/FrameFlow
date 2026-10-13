@@ -1,6 +1,13 @@
 # FrameFlow — Progress Log
 
-_Last updated: 2026-10-12 (FrameFlow 2.1 — Sound)_
+_Last updated: 2026-10-12 (FrameFlow 2.2 — GIF export)_
+
+## 2.2 (branch `feat/gif-export`, merged to `main`)
+- [x] Animated GIF export (shared renderer, rgb565 per-frame palettes, exact delays, loops,
+      streamed, cancellable). Width and fps are set in the export sheet.
+- [x] Tests: 93 unit tests; e2e 26 passed / 1 skipped / 0 failed on the packaged build.
+- Next: annotations (text, arrows), then the permission-gated items (microphone check,
+  webcam) once a person can approve the macOS prompts.
 
 ## 2.1 (branch `feat/sound`, merged to `main`)
 - [x] System audio capture (real capture verified, including window recordings via an

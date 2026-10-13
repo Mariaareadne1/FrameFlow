@@ -111,17 +111,18 @@ export function registerIpc(capture: CaptureController, getWindows: () => Browse
   ipc.handle(IPC.projectReveal, (_e, p: unknown) => revealRecent(str(p, 'path')))
   ipc.handle(IPC.projectReadCursor, (_e, p: unknown) => readCursorFile(str(p, 'path')))
 
-  ipc.handle(IPC.exportChoose, async (e, name: unknown) => {
+  ipc.handle(IPC.exportChoose, async (e, name: unknown, format: unknown) => {
     const win = windowOf(e)
+    const ext = format === 'gif' ? 'gif' : 'mp4'
     const opts = {
-      title: 'Export Video',
-      defaultPath: join(app.getPath('desktop'), `${safeName(typeof name === 'string' ? name : 'FrameFlow')}.mp4`),
-      filters: [{ name: 'MP4 Video', extensions: ['mp4'] }],
+      title: ext === 'gif' ? 'Export GIF' : 'Export Video',
+      defaultPath: join(app.getPath('desktop'), `${safeName(typeof name === 'string' ? name : 'FrameFlow')}.${ext}`),
+      filters: [ext === 'gif' ? { name: 'Animated GIF', extensions: ['gif'] } : { name: 'MP4 Video', extensions: ['mp4'] }],
     }
     const res = win ? await dialog.showSaveDialog(win, opts) : await dialog.showSaveDialog(opts)
     if (res.canceled || !res.filePath) return null
     let path = res.filePath
-    if (!path.toLowerCase().endsWith('.mp4')) path += '.mp4'
+    if (!path.toLowerCase().endsWith(`.${ext}`)) path += `.${ext}`
     allowExport(path)
     return canonical(path)
   })

@@ -7,6 +7,8 @@ import { useApp } from '../state/appStore'
 import { useEditor } from '../state/editorStore'
 import { playback } from '../state/playhead'
 import { ExportCancelledError, exportProject, type ExportProgress, type ExportResult } from '../media/exporter'
+import { exportGif } from '../media/gifExporter'
+import { gifSize } from '@shared/engine/gif'
 import { errorMessage, formatTime } from '../lib/format'
 import { Sheet } from './Modal'
 import { LiveFrame } from './LiveFrame'
@@ -50,13 +52,14 @@ export function ExportDialog() {
 
   if (!project) return null
   const settings = project.export
-  const size = outputSize(project.aspectRatio, settings.resolution)
+  const isGif = settings.format === 'gif'
+  const size = isGif ? gifSize(project) : outputSize(project.aspectRatio, settings.resolution)
   const duration = outputDuration(keptSegments(project.trims, project.media.duration))
   const setSettings = (patch: Partial<ExportSettings>) => apply((p) => ({ ...p, export: { ...p.export, ...patch } }))
   const running = phase.name === 'running'
 
   const choose = async (): Promise<string | null> => {
-    const dest = await window.frameflow.export.chooseDestination(project.name)
+    const dest = await window.frameflow.export.chooseDestination(project.name, settings.format)
     if (dest) setDestination(dest)
     return dest
   }
@@ -70,7 +73,8 @@ export function ExportDialog() {
     try {
       const { project: current, track: currentTrack } = useEditor.getState()
       if (!current) throw new Error('No project is open.')
-      const result = await exportProject({ project: current, track: currentTrack, destination: dest, signal: controller.signal, onProgress: (progress) => setPhase({ name: 'running', progress }) })
+      const run = current.export.format === 'gif' ? exportGif : exportProject
+      const result = await run({ project: current, track: currentTrack, destination: dest, signal: controller.signal, onProgress: (progress) => setPhase({ name: 'running', progress }) })
       setPhase({ name: 'done', result })
     } catch (err) {
       if (err instanceof ExportCancelledError) setPhase({ name: 'setup' })
@@ -101,12 +105,23 @@ export function ExportDialog() {
             </div>
             <p className="mt-2 text-center text-[11.5px] text-ink-3">The finished composition at the playhead.</p>
             <div className="mt-4 space-y-1.5 text-[12px]">
-              <div className="flex justify-between"><span className="text-ink-2">Format</span><span className="text-ink">MP4 · H.264{project.media.hasAudio ? ' · AAC' : ''}</span></div>
+              <div className="flex justify-between"><span className="text-ink-2">Format</span><span className="text-ink">{isGif ? 'GIF · loops · silent' : `MP4 · H.264${project.media.hasAudio || project.sound.tracks.length > 0 ? ' · AAC' : ''}`}</span></div>
               <div className="flex justify-between"><span className="text-ink-2">Size</span><span className="font-mono text-ink">{size.width} × {size.height}</span></div>
               <div className="flex justify-between"><span className="text-ink-2">Duration</span><span className="font-mono text-ink">{formatTime(duration, true)}</span></div>
             </div>
           </div>
           <div className="space-y-4">
+            <Row label="Format">
+              <Segmented
+                label="Export format"
+                value={settings.format}
+                onChange={(format) => {
+                  setDestination(null)
+                  setSettings({ format })
+                }}
+                options={[{ value: 'mp4', label: 'Video (MP4)' }, { value: 'gif', label: 'Animated GIF' }]}
+              />
+            </Row>
             <Row label="Aspect ratio">
               <Segmented<AspectRatio>
                 label="Aspect ratio"
@@ -115,6 +130,28 @@ export function ExportDialog() {
                 options={[{ value: '16:9', label: '16:9' }, { value: '9:16', label: '9:16' }, { value: '1:1', label: '1:1' }, { value: '4:3', label: '4:3' }]}
               />
             </Row>
+            {isGif ? (
+              <>
+                <Row label="Width">
+                  <Segmented
+                    label="GIF width"
+                    value={String(settings.gifWidth)}
+                    onChange={(v) => setSettings({ gifWidth: Number(v) as ExportSettings['gifWidth'] })}
+                    options={[{ value: '480', label: '480 px' }, { value: '720', label: '720 px' }, { value: '960', label: '960 px' }]}
+                  />
+                </Row>
+                <Row label="Frame rate">
+                  <Segmented
+                    label="GIF frame rate"
+                    value={String(settings.gifFps)}
+                    onChange={(v) => setSettings({ gifFps: Number(v) as ExportSettings['gifFps'] })}
+                    options={[{ value: '10', label: '10 fps' }, { value: '15', label: '15 fps' }, { value: '20', label: '20 fps' }]}
+                  />
+                </Row>
+                {duration > 30 && <p className="text-[12px] leading-snug text-coral-ink">GIFs get large quickly. For clips over 30 seconds, MP4 is usually the better choice.</p>}
+              </>
+            ) : (
+              <>
             <Row label="Resolution">
               <Segmented
                 label="Resolution"
@@ -131,6 +168,8 @@ export function ExportDialog() {
                 <Segmented label="Quality" value={settings.quality} onChange={(quality) => setSettings({ quality })} options={[{ value: 'standard', label: 'Standard' }, { value: 'high', label: 'High' }]} />
               </Row>
             </div>
+              </>
+            )}
             <Row label="Save to">
               <div className="flex items-center gap-2 rounded-[12px] bg-sunk py-1.5 pl-3 pr-1.5">
                 <span className="min-w-0 flex-1 truncate text-[12.5px] text-ink" title={destination ?? undefined} data-testid="export-destination">
@@ -140,7 +179,7 @@ export function ExportDialog() {
               </div>
             </Row>
             <Button variant="primary" size="lg" className="w-full" data-testid="export-start" onClick={start} disabled={duration <= 0}>
-              Export video
+              {isGif ? 'Export GIF' : 'Export video'}
             </Button>
           </div>
         </div>

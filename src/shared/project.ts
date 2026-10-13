@@ -131,10 +131,15 @@ export interface SoundSettings {
 }
 
 export interface ExportSettings {
-  /** Short side of the output in pixels. */
+  /** 'mp4' (H.264 + AAC) or an animated 'gif' (silent, looping). */
+  format: 'mp4' | 'gif'
+  /** Short side of the output in pixels (MP4). */
   resolution: 720 | 1080 | 1440 | 2160
   fps: 30 | 60
   quality: 'standard' | 'high'
+  /** Width of a GIF in pixels. */
+  gifWidth: 480 | 720 | 960
+  gifFps: 10 | 15 | 20
 }
 
 export interface MediaInfo {

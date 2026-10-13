@@ -10,6 +10,7 @@ FrameFlow itself is released under the MIT License (see `LICENSE`).
 | [React](https://github.com/facebook/react) / react-dom / scheduler | 19.x | MIT | User interface |
 | [zustand](https://github.com/pmndrs/zustand) | 5.x | MIT | State management |
 | [mediabunny](https://github.com/Vanilagy/mediabunny) | 1.61.x | MPL-2.0 | Demuxing, decoding, encoding and MP4 muxing (via WebCodecs). Used unmodified; source is available at the link. |
+| [gifenc](https://github.com/mattdesl/gifenc) | 1.0.x | MIT | GIF encoding and palette quantisation |
 | [lucide-react](https://github.com/lucide-icons/lucide) | 1.x | ISC | Icons |
 | [clsx](https://github.com/lukeed/clsx) | 2.x | MIT | Class names |
 | [Tailwind CSS](https://github.com/tailwindlabs/tailwindcss) | 4.x | MIT | Generated stylesheet |

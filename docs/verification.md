@@ -1,5 +1,23 @@
 # Verification Record — FrameFlow 2.0 / 2.1
 
+## 2.2 (GIF) — 2026-10-12, branch `feat/gif-export`
+
+- **Unit tests: 93/93.** These include the delay error diffusion (exact totals for 10, 15
+  and 20 fps), GIF sizing per aspect ratio, and safe parsing of export settings.
+- **14 gif.**
+  - The GIF is 720×406 with **75 frames** (5 s × 15 fps) and a duration of 5.00 s.
+  - It loops (NETSCAPE2.0 extension present) and decodes cleanly.
+  - Mean difference from the MP4 of the same project was **2.82, 2.80 and 2.77 out of 255**
+    at three times.
+  - Cancelling leaves no file and no `.partial`.
+- **Quality bug found visually and fixed.** rgb444 quantisation banded the Aura gradient and
+  erased light-grey UI detail. Switching to rgb565 fixed it and also lowered the mean
+  difference from 3.5 to 2.8.
+- **Full regression on the packaged 2.2.0 build** (`FRAMEFLOW_REAL_CAPTURE=1 npx playwright
+  test`): ✅ **26 passed**, 1 skipped (the screenshot generator), **0 failed**. This includes
+  real window capture (05), real system audio (13), the packaged app (07), legacy
+  pixel-identity (11), sound (12) and GIF (14). Lint and types are clean.
+
 ## 2.1 (Sound) — 2026-10-12, branch `feat/sound`
 
 | Check | Result |

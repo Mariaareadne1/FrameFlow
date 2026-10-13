@@ -108,7 +108,7 @@ export interface FrameFlowAPI {
     readCursor(path: string): Promise<unknown>
   }
   export: {
-    chooseDestination(defaultName: string): Promise<string | null>
+    chooseDestination(defaultName: string, format?: 'mp4' | 'gif'): Promise<string | null>
     begin(path: string): Promise<number>
     write(handle: number, position: number, data: Uint8Array): Promise<void>
     finish(handle: number): Promise<void>

@@ -41,7 +41,7 @@ const api: FrameFlowAPI = {
     readCursor: (path) => ipcRenderer.invoke(IPC.projectReadCursor, path),
   },
   export: {
-    chooseDestination: (name) => ipcRenderer.invoke(IPC.exportChoose, name),
+    chooseDestination: (name, format) => ipcRenderer.invoke(IPC.exportChoose, name, format),
     begin: (path) => ipcRenderer.invoke(IPC.exportBegin, path),
     write: (handle, position, data) => ipcRenderer.invoke(IPC.exportWrite, handle, position, data),
     finish: (handle) => ipcRenderer.invoke(IPC.exportFinish, handle),

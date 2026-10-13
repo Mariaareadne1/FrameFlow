@@ -33,7 +33,7 @@ export function newId(prefix: string): string {
 /** Shortest cut the editor keeps alive while its edges are being edited. */
 export const MIN_TRIM_LENGTH = 0.1
 
-export const DEFAULT_EXPORT: ExportSettings = { resolution: 1080, fps: 60, quality: 'high' }
+export const DEFAULT_EXPORT: ExportSettings = { format: 'mp4', resolution: 1080, fps: 60, quality: 'high', gifWidth: 720, gifFps: 15 }
 
 export interface CreateProjectOptions {
   name: string
@@ -403,9 +403,12 @@ export function parseProject(raw: unknown): Project {
   cursor.clickEffect = cursor.effect === 'pulse'
   const ex = isObj(raw.export) ? raw.export : {}
   const exportSettings: ExportSettings = {
+    format: ex.format === 'gif' ? 'gif' : 'mp4',
     resolution: oneOf(ex.resolution, RESOLUTIONS, 1080),
     fps: ex.fps === 30 ? 30 : 60,
     quality: ex.quality === 'standard' ? 'standard' : 'high',
+    gifWidth: oneOf(ex.gifWidth, [480, 720, 960] as const, 720),
+    gifFps: oneOf(ex.gifFps, [10, 15, 20] as const, 15),
   }
   const zooms = (Array.isArray(raw.zooms) ? raw.zooms.slice(0, MAX_EVENTS) : [])
     .map((z) => parseZoom(z, duration))
