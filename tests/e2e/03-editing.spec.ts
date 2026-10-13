@@ -2,7 +2,7 @@ import { expect, test, type Page } from '@playwright/test'
 import { join } from 'node:path'
 import { computeLayout, outputSize } from '../../src/shared/engine/layout'
 import type { FrameStyle } from '../../src/shared/project'
-import { ARTIFACTS, copyFixture, exportVia, launch, openPanel, savedProject, stubOpenDialog } from './helpers'
+import { ARTIFACTS, copyFixture, exportVia, launch, openPanel, savedProject, stubOpenDialog, settledBox } from './helpers'
 import { decodeErrors, frameAt, frameDiff, pixel, probe, readTimecode, savePng } from '../support/media'
 
 const SRC_W = 1920
@@ -10,7 +10,8 @@ const SRC_H = 1200
 
 async function seek(page: Page, t: number, duration: number): Promise<void> {
   const ruler = page.getByTestId('timeline-ruler')
-  const box = (await ruler.boundingBox())!
+  // Panels slide in and out; measure the ruler only once it has settled.
+  const box = await settledBox(page, ruler)
   const before = await page.getByTestId('timecode').innerText()
   await ruler.click({ position: { x: (t / duration) * box.width, y: box.height / 2 } })
   // Let the seek land before acting at the playhead.
@@ -123,7 +124,7 @@ test('editing: trims, manual zooms, styling — preview and exports stay in sync
     // Move the 20s zoom by dragging it on the timeline.
     const z20 = p.zooms.find((z) => Math.abs(z.start - 20) < 0.5)!
     const block = page.getByTestId(`zoom-${z20.id}`)
-    const bb = (await block.boundingBox())!
+    const bb = await settledBox(page, block)
     await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2)
     await page.mouse.down()
     await page.mouse.move(bb.x + bb.width / 2 + 60, bb.y + bb.height / 2, { steps: 6 })

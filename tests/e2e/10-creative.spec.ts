@@ -7,7 +7,7 @@ import { join } from 'node:path'
 import { computeLayout, outputSize } from '../../src/shared/engine/layout'
 import type { Project } from '../../src/shared/project'
 import { STYLE_PRESETS } from '../../src/shared/styles'
-import { ARTIFACTS, exportVia, launch, openDemoProject, openPanel, savedProject } from './helpers'
+import { ARTIFACTS, exportVia, launch, openDemoProject, openPanel, savedProject, settledBox } from './helpers'
 import { FFMPEG, decodeErrors, frameAt, frameDiff, meanLuma, pixel, probe, savePng, type RgbFrame } from '../support/media'
 
 /** Cut the 30 s demo down to 8–13 s (three clicks) and export at 720p30 to keep the suite fast. */
@@ -16,7 +16,7 @@ async function prepareShortExport(page: Page): Promise<void> {
   for (const [a, b] of [[0, 8], [13, 30]] as const) {
     // Put the playhead inside the range first so each Cut is a new one.
     const ruler = page.getByTestId('timeline-ruler')
-    const rb = (await ruler.boundingBox())!
+    const rb = await settledBox(page, ruler)
     await ruler.click({ position: { x: ((a + 0.5) / 30) * rb.width, y: 5 } })
     await page.getByTestId('add-cut').click()
     await page.getByRole('textbox', { name: 'Start' }).fill(String(a))

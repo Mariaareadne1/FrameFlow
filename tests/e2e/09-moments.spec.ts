@@ -1,6 +1,6 @@
 import { expect, test, type Page } from '@playwright/test'
 import { join } from 'node:path'
-import { ARTIFACTS, exportVia, launch, openDemoProject, openPanel, savedProject } from './helpers'
+import { ARTIFACTS, exportVia, launch, openDemoProject, openPanel, savedProject, settledBox } from './helpers'
 import { decodeErrors, frameAt, frameDiff, probe } from '../support/media'
 
 /** Reads the fixture time code (seconds mod 10) out of a Moment thumbnail. */
@@ -113,7 +113,7 @@ test('Moments: real thumbnails, seeking, editing, feel changes, cuts and Timelin
     const third = saved.zooms.find((z) => z.start > target.end + 1)!
     await openPanel(page, 'timeline')
     const ruler = page.getByTestId('timeline-ruler')
-    const rb = (await ruler.boundingBox())!
+    const rb = await settledBox(page, ruler)
     await ruler.click({ position: { x: (third.start / 30) * rb.width, y: 5 } })
     await page.getByTestId('add-cut').click()
     await page.getByRole('textbox', { name: 'Start' }).fill(String(Math.max(0, third.start - 0.2)))
@@ -130,7 +130,7 @@ test('Moments: real thumbnails, seeking, editing, feel changes, cuts and Timelin
     // A Timeline drag moves the same event the Moment card shows.
     await openPanel(page, 'timeline')
     const block = page.getByTestId(`zoom-${second.id}`)
-    const bb = (await block.boundingBox())!
+    const bb = await settledBox(page, block)
     await page.mouse.move(bb.x + bb.width / 2, bb.y + bb.height / 2)
     await page.mouse.down()
     await page.mouse.move(bb.x + bb.width / 2 + 50, bb.y + bb.height / 2, { steps: 5 })

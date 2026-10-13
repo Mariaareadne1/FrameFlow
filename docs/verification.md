@@ -17,8 +17,16 @@
 - **Test bug found and fixed.** The first version of the check sampled a band across the
   caption's light text, so the mean luma came out at 142. Looking at the frame showed the
   pill in the right place; the check now samples the pill's top padding.
-- **Full regression on the packaged 2.3.0 build: not yet run to completion.** The run was
-  paused on 2026-10-12 before it finished.
+- **Two flaky timeline tests found and fixed (test-only).** The first full run failed 03
+  (1 in 3 runs alone), and the next run failed 09. In both, the test measured the timeline
+  while the panel was still sliding in or out, so clicks and drags landed at about 0.72× the
+  intended time (20 s → 14.4 s). A shared `settledBox` helper now waits until the element
+  stops moving. 03, 09, 10 and 14, which all measure the timeline, then passed **21/21**
+  runs (three repeats each).
+- **Full regression on the packaged 2.3.0 build** (2026-10-13, `FRAMEFLOW_REAL_CAPTURE=1 npx
+  playwright test`): ✅ **27 passed**, 1 skipped (the screenshot generator), **0 failed**.
+  This includes real capture (05, 13), the packaged app (07), legacy pixel-identity (11),
+  sound (12), GIF (14) and annotations (15). Lint and types are clean.
 
 ## 2.2 (GIF) — 2026-10-12, branch `feat/gif-export`
 

@@ -1,4 +1,4 @@
-import { _electron as electron, expect, type ElectronApplication, type Page } from '@playwright/test'
+import { _electron as electron, expect, type ElectronApplication, type Locator, type Page } from '@playwright/test'
 import { cpSync, mkdtempSync, mkdirSync, readFileSync, readdirSync, statSync, writeFileSync } from 'node:fs'
 import { createProject, type CreateProjectOptions } from '../../src/shared/projectModel'
 import { parseCursorTrack } from '../../src/shared/engine/cursor'
@@ -126,3 +126,15 @@ export async function openDemoProject(page: Page, app: ElectronApplication, libr
   return project
 }
 
+
+/** An element's box once panel slide/fade animations have finished moving or resizing it. */
+export async function settledBox(page: Page, el: Locator): Promise<{ x: number; y: number; width: number; height: number }> {
+  let box = (await el.boundingBox())!
+  for (let i = 0; i < 20; i++) {
+    await page.waitForTimeout(50)
+    const next = (await el.boundingBox())!
+    if (next.x === box.x && next.y === box.y && next.width === box.width && next.height === box.height) return next
+    box = next
+  }
+  return box
+}

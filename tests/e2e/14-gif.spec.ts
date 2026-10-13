@@ -1,7 +1,7 @@
 import { expect, test } from '@playwright/test'
 import { existsSync, readFileSync, readdirSync } from 'node:fs'
 import { join } from 'node:path'
-import { ARTIFACTS, exportVia, launch, openDemoProject, openPanel, savedProject, stubSaveDialog } from './helpers'
+import { ARTIFACTS, exportVia, launch, openDemoProject, openPanel, savedProject, stubSaveDialog, settledBox } from './helpers'
 import { decodeErrors, frameAt, frameDiff, probe, savePng } from '../support/media'
 
 test('GIF export: same composition as MP4, exact timing, loops, cancellable', async () => {
@@ -13,7 +13,7 @@ test('GIF export: same composition as MP4, exact timing, loops, cancellable', as
     await openPanel(page, 'timeline')
     for (const [a, b] of [[0, 9], [14, 30]] as const) {
       const ruler = page.getByTestId('timeline-ruler')
-      const rb = (await ruler.boundingBox())!
+      const rb = await settledBox(page, ruler)
       await ruler.click({ position: { x: ((a + 0.5) / 30) * rb.width, y: 5 } })
       await page.getByTestId('add-cut').click()
       await page.getByRole('textbox', { name: 'Start' }).fill(String(a))
